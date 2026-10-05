@@ -1,0 +1,74 @@
+# Builds the install DMG for every push to main-macos, versioned
+# <Info.plist version>-edge.<run number>, and keeps it as a workflow artifact
+# for 14 days. Creates no tags or releases; see docs/RELEASING.md.
+name: Edge build
+
+on:
+  push:
+    branches: [main-macos]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Only the newest commit's build matters.
+concurrency:
+  group: edge-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dmg:
+    name: dmg
+    runs-on: macos-14
+    timeout-minutes: 45
+    env:
+      # Finder scripting is unreliable on hosted runners; the plain DMG has the same contents.
+      DMG_PLAIN: "1"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # build.sh numbers builds by commit count.
+          fetch-depth: 0
+
+      - name: Version
+        run: |
+          base=$(plutil -extract CFBundleShortVersionString raw Resources/Info.plist)
+          version="$base-edge.$GITHUB_RUN_NUMBER"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "Whiteprint $version"
+          swift --version
+
+      - name: Build DMG
+        run: Scripts/release.sh "$VERSION"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Whiteprint-${{ env.VERSION }}
+          path: |
+            .build/release/Whiteprint-${{ env.VERSION }}.dmg
+            .build/release/Whiteprint-${{ env.VERSION }}.dmg.sha256
+          retention-days: 14
+          if-no-files-found: error
+          # A DMG is already compressed.
+          compression-level: 0
+
+      - name: Summary
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          sha=$(cut -d' ' -f1 < ".build/release/Whiteprint-$VERSION.dmg.sha256")
+          {
+            echo "### Whiteprint $VERSION (edge build)"
+            echo
+            echo "An untested build of \`${GITHUB_SHA:0:7}\` on \`main-macos\`, for Intel and Apple Silicon Macs"
+            echo "running macOS 13 or later. It is ad-hoc signed and kept for 14 days."
+            echo
+            echo "1. Download **Whiteprint-$VERSION** under *Artifacts* on [this run]($RUN_URL)"
+            echo "   (you need to be signed in to GitHub) and unzip it."
+            echo "2. Check the DMG: \`shasum -a 256 -c Whiteprint-$VERSION.dmg.sha256\` should print \`OK\`."
+            echo "3. Open the DMG and drag Whiteprint to Applications."
+            echo "4. The first time, right-click Whiteprint in Applications and choose **Open**, or click"
+            echo "   **Open Anyway** in System Settings → Privacy & Security."
+            echo
+            echo "SHA-256: \`$sha\`"
+          } >> "$GITHUB_STEP_SUMMARY"
