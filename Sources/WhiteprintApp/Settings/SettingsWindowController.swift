@@ -12,6 +12,7 @@ final class SettingsWindowController: NSWindowController {
         tabs.addTabViewItem(Self.tab(StudySettingsViewController(), "Study", "graduationcap"))
         let window = NSWindow(contentViewController: tabs)
         window.styleMask = [.titled, .closable]
+        window.title = tabs.tabViewItems[0].label
         window.isReleasedWhenClosed = false
         super.init(window: window)
         window.center()

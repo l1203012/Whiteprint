@@ -80,15 +80,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @IBAction func showCommandPalette(_ sender: Any?) {
-        CommandPalette.shared.show(over: NSApp.mainWindow)
+        CommandPalette.shared.show(over: NoteDocuments.frontWindow)
     }
 
     @IBAction func showStudyPanel(_ sender: Any?) {
-        StudyPanelController.present(over: NSApp.mainWindow)
+        StudyPanelController.present(over: NoteDocuments.frontWindow)
     }
 
     @IBAction func generateStudyPlan(_ sender: Any?) {
-        StudyPanelController.present(over: NSApp.mainWindow, generating: true)
+        StudyPanelController.present(over: NoteDocuments.frontWindow, generating: true)
     }
 
     @IBAction func showSettings(_ sender: Any?) {

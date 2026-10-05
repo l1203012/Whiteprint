@@ -8,14 +8,14 @@ enum NoteDocuments {
     }
 
     static func document(for url: URL) -> NoteDocument? {
-        let url = url.standardizedFileURL
-        return open.first { $0.fileURL?.standardizedFileURL == url }
+        let url = url.canonicalFile
+        return open.first { $0.fileURL?.canonicalFile == url }
     }
 
-    /// The note in the frontmost note window.
-    static var current: NoteDocument? {
-        (NSApp.mainWindow?.windowController as? NoteWindowController)?.noteDocument
-            ?? (NSDocumentController.shared.currentDocument as? NoteDocument)
+    /// The frontmost note window, even while Whiteprint isn't the active app.
+    static var frontWindow: NSWindow? {
+        NSApp.mainWindow.flatMap { $0.windowController is NoteWindowController ? $0 : nil }
+            ?? NSApp.orderedWindows.first { $0.windowController is NoteWindowController && $0.isVisible }
     }
 
     /// Opens `url` synchronously (so a bridge request can edit it right

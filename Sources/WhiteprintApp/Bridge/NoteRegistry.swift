@@ -8,7 +8,7 @@ final class NoteRegistry {
     private var next = 1
 
     func id(for url: URL) -> String {
-        let url = url.standardizedFileURL
+        let url = url.canonicalFile
         if let id = idsByPath[url.path] { return id }
         let id = "n\(next)"
         next += 1
@@ -23,7 +23,7 @@ final class NoteRegistry {
 
     /// Keeps the id of a file that was renamed or moved.
     func move(from old: URL, to new: URL) {
-        let old = old.standardizedFileURL, new = new.standardizedFileURL
+        let old = old.canonicalFile, new = new.canonicalFile
         guard old != new, let id = idsByPath.removeValue(forKey: old.path) else { return }
         idsByPath[new.path] = id
         urlsByID[id] = new

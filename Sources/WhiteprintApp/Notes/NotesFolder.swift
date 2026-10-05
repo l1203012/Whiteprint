@@ -41,12 +41,12 @@ struct NotesFolder: Equatable {
         )) ?? []
         return contents
             .filter { $0.pathExtension.lowercased() == Self.fileExtension }
-            .map(\.standardizedFileURL)
+            .map(\.canonicalFile)
             .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
     }
 
     func contains(_ file: URL) -> Bool {
-        file.standardizedFileURL.deletingLastPathComponent().path == url.standardizedFileURL.path
+        file.canonicalFile.deletingLastPathComponent().path == url.canonicalFile.path
     }
 
     /// A file URL for a new note named after `title` that doesn't exist yet:
@@ -59,7 +59,7 @@ struct NotesFolder: Equatable {
             candidate = url.appendingPathComponent("\(base) \(n)").appendingPathExtension(Self.fileExtension)
             n += 1
         }
-        return candidate.standardizedFileURL
+        return candidate.canonicalFile
     }
 
     /// A safe file name for `title`: no path separators, colons or leading dots,

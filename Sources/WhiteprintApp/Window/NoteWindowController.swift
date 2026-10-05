@@ -51,7 +51,7 @@ final class NoteWindowController: NSWindowController, NSWindowDelegate, NSToolba
         window.toolbar = toolbar
 
         breadcrumb.lineBreakMode = .byTruncatingMiddle
-        breadcrumb.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        breadcrumb.widthAnchor.constraint(lessThanOrEqualToConstant: 520).isActive = true
 
         sidebar.windowController = self
         editor.onChange = { [weak document] note in document?.editorDidChange(note) }
@@ -60,6 +60,7 @@ final class NoteWindowController: NSWindowController, NSWindowDelegate, NSToolba
             self?.documentChanged(origin: notification.userInfo?["origin"] as? NoteDocument.ChangeOrigin)
         }
         updateBreadcrumb()
+        sidebar.reloadAll()
     }
 
     @available(*, unavailable)

@@ -26,7 +26,7 @@ final class NoteDocument: NSDocument {
 
     override var fileURL: URL? {
         didSet {
-            guard oldValue?.standardizedFileURL != fileURL?.standardizedFileURL else { return }
+            guard oldValue?.canonicalFile != fileURL?.canonicalFile else { return }
             if let old = oldValue {
                 NotificationCenter.default.post(name: .noteDocumentDidMove, object: self, userInfo: ["old": old])
             }

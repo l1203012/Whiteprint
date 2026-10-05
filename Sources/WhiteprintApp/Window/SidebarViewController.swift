@@ -142,7 +142,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     }
 
     private func selectCurrentNote() {
-        guard let url = windowController?.noteDocument?.fileURL?.standardizedFileURL,
+        guard let url = windowController?.noteDocument?.fileURL?.canonicalFile,
               let node = notes.children.first(where: { if case .note(let entry) = $0.kind { return entry.url == url }; return false })
         else {
             outline.deselectAll(nil)
@@ -171,7 +171,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         guard let node = outline.item(atRow: outline.clickedRow) as? SidebarNode else { return }
         switch node.kind {
         case .note(let entry):
-            if entry.url != windowController?.noteDocument?.fileURL?.standardizedFileURL {
+            if entry.url != windowController?.noteDocument?.fileURL?.canonicalFile {
                 NoteDocuments.open(entry.url)
             }
         case .page(let number, _):
@@ -277,6 +277,7 @@ private final class SidebarCell: NSTableCellView {
         imageView = icon
         title.lineBreakMode = .byTruncatingTail
         title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        title.setContentHuggingPriority(.init(1), for: .horizontal)
         detail.textColor = .tertiaryLabelColor
         detail.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         detail.alignment = .right

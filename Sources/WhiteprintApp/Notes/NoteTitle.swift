@@ -25,3 +25,11 @@ enum NoteTitle {
         url.deletingPathExtension().lastPathComponent
     }
 }
+
+extension URL {
+    /// One spelling per file, so URLs from the document system and from
+    /// folder listings compare equal (`/tmp` vs `/private/tmp`, `./`).
+    var canonicalFile: URL {
+        standardizedFileURL.resolvingSymlinksInPath()
+    }
+}

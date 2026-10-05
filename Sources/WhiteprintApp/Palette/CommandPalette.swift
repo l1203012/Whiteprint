@@ -15,11 +15,11 @@ struct PaletteItem {
 
 /// ⌘K: a centred floating panel to jump to notes and pages and run commands.
 /// Arrow keys move, Return runs, Escape (or clicking elsewhere) closes.
-final class CommandPalette: NSObject, NSSearchFieldDelegate, NSTableViewDataSource, NSTableViewDelegate, NSWindowDelegate {
+final class CommandPalette: NSObject, NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate, NSWindowDelegate {
     static let shared = CommandPalette()
 
     private lazy var panel = makePanel()
-    private let field = NSSearchField()
+    private let field = NSTextField()
     private let table = NSTableView()
     private var items: [PaletteItem] = []
     private var shown: [PaletteItem] = []
@@ -44,7 +44,7 @@ final class CommandPalette: NSObject, NSSearchFieldDelegate, NSTableViewDataSour
     private static func items(for controller: NoteWindowController?) -> [PaletteItem] {
         let app = NSApp.delegate as? AppDelegate
         var items: [PaletteItem] = []
-        let current = controller?.noteDocument?.fileURL?.standardizedFileURL
+        let current = controller?.noteDocument?.fileURL?.canonicalFile
         for entry in AppServices.shared.library.entries {
             items.append(PaletteItem(kind: .note, title: entry.title, detail: entry.url == current ? "Open" : "Note", symbol: "doc.text") {
                 NoteDocuments.open(entry.url)
@@ -106,7 +106,7 @@ final class CommandPalette: NSObject, NSSearchFieldDelegate, NSTableViewDataSour
         table.scrollRowToVisible(row)
     }
 
-    // MARK: NSSearchFieldDelegate
+    // MARK: NSTextFieldDelegate
 
     func controlTextDidChange(_ notification: Notification) {
         filter()
@@ -185,7 +185,9 @@ final class CommandPalette: NSObject, NSSearchFieldDelegate, NSTableViewDataSour
         field.isBordered = false
         field.drawsBackground = false
         field.delegate = self
-        (field.cell as? NSSearchFieldCell)?.cancelButtonCell = nil
+        let glass = NSImageView(image: NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)!)
+        glass.contentTintColor = .secondaryLabelColor
+        glass.symbolConfiguration = .init(pointSize: 16, weight: .regular)
 
         let column = NSTableColumn(identifier: .init("item"))
         table.addTableColumn(column)
@@ -207,13 +209,15 @@ final class CommandPalette: NSObject, NSSearchFieldDelegate, NSTableViewDataSour
         let divider = NSBox()
         divider.boxType = .separator
 
-        for view in [field, divider, scroll] as [NSView] {
+        for view in [glass, field, divider, scroll] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             background.addSubview(view)
         }
         NSLayoutConstraint.activate([
             field.topAnchor.constraint(equalTo: background.topAnchor, constant: 14),
-            field.leadingAnchor.constraint(equalTo: background.leadingAnchor, constant: 14),
+            glass.leadingAnchor.constraint(equalTo: background.leadingAnchor, constant: 16),
+            glass.centerYAnchor.constraint(equalTo: field.centerYAnchor),
+            field.leadingAnchor.constraint(equalTo: glass.trailingAnchor, constant: 8),
             field.trailingAnchor.constraint(equalTo: background.trailingAnchor, constant: -14),
             divider.topAnchor.constraint(equalTo: field.bottomAnchor, constant: 10),
             divider.leadingAnchor.constraint(equalTo: background.leadingAnchor),

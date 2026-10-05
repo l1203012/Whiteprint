@@ -52,7 +52,7 @@ final class NotesLibrary {
     var urls: [URL] {
         let inFolder = folder.noteURLs()
         let known = Set(inFolder.map(\.path))
-        let elsewhere = NoteDocuments.open.compactMap { $0.fileURL?.standardizedFileURL }.filter { !known.contains($0.path) }
+        let elsewhere = NoteDocuments.open.compactMap { $0.fileURL?.canonicalFile }.filter { !known.contains($0.path) }
         return inFolder + elsewhere
     }
 
@@ -72,7 +72,7 @@ final class NotesLibrary {
 
     /// Refreshes one open document's entry without touching the disk.
     private func update(_ document: NoteDocument) {
-        guard let url = document.fileURL?.standardizedFileURL,
+        guard let url = document.fileURL?.canonicalFile,
               let i = entries.firstIndex(where: { $0.url == url }) else { return reload() }
         let entry = NoteEntry(url: url, title: document.title, pageCount: document.note.pages.count)
         guard entries[i] != entry else { return }
