@@ -26,5 +26,6 @@ let package = Package(
         .executableTarget(name: "whiteprint-mcp", dependencies: ["WhiteprintCore", "WhiteprintBridge"]),
 
         .testTarget(name: "WhiteprintCoreTests", dependencies: ["WhiteprintCore"]),
+        .testTarget(name: "WhiteprintBridgeTests", dependencies: ["WhiteprintBridge", "WhiteprintCore"]),
     ]
 )
