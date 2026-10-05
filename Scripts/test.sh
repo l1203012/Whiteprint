@@ -11,16 +11,35 @@
 # own top-level code.
 # The stand-in supports XCTestCase with setUp/tearDown, sync/async/throwing
 # test methods and the common XCTAssert functions, not expectations.
+#
+#   WHITEPRINT_TEST_RUNNER=auto     `swift test` when XCTest is available, else the stand-in (default)
+#   WHITEPRINT_TEST_RUNNER=swiftpm  always `swift test`
+#   WHITEPRINT_TEST_RUNNER=shim     always the stand-in, even with Xcode installed; CI uses
+#                                   this to keep the Command Line Tools path working
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 
 if [ $# -eq 0 ]; then
-    set -- $(cd Tests && ls -d *Tests 2>/dev/null | sed 's/Tests$//')
+    for dir in Tests/*Tests; do
+        # bash 3.2 treats an empty "$@" as unset under `set -u`.
+        [ -d "$dir" ] && set -- ${@+"$@"} "$(basename "$dir" Tests)"
+    done
 fi
 
-if xcrun --find xctest >/dev/null 2>&1; then
+runner=${WHITEPRINT_TEST_RUNNER:-auto}
+case $runner in
+    auto)
+        runner=shim
+        if xcrun --find xctest >/dev/null 2>&1; then runner=swiftpm; fi
+        ;;
+    swiftpm | shim) ;;
+    *) echo "WHITEPRINT_TEST_RUNNER must be auto, swiftpm or shim, not '$runner'" >&2; exit 2 ;;
+esac
+echo "Test runner: $runner"
+
+if [ "$runner" = swiftpm ]; then
     filters=""
     for target in "$@"; do filters="$filters --filter ${target}Tests"; done
     # shellcheck disable=SC2086
