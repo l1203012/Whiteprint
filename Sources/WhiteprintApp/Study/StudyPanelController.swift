@@ -14,6 +14,7 @@ final class StudyPanelController: NSViewController, NSTableViewDataSource, NSTab
     private let status = NSTextView()
     private let statusScroll = NSScrollView()
     private let claudeHelp = NSTextField(wrappingLabelWithString: "")
+    private let privacy = NSTextField(wrappingLabelWithString: "")
     private let generateButton = NSButton(title: "Generate study plan", target: nil, action: nil)
     private let cancelButton = NSButton(title: "Cancel", target: nil, action: nil)
     private var observer: NSObjectProtocol?
@@ -49,7 +50,7 @@ final class StudyPanelController: NSViewController, NSTableViewDataSource, NSTab
     override func loadView() {
         let title = NSTextField(labelWithString: "Study plan")
         title.font = .systemFont(ofSize: 17, weight: .semibold)
-        let subtitle = NSTextField(wrappingLabelWithString: "Add lecture slides, PDFs or Word files. Claude reads them through Whiteprint and writes a study plan note with must-know topics, a learning path and a to-do list.")
+        let subtitle = NSTextField(wrappingLabelWithString: "Add lecture slides, PDFs or Word files. Claude (or Grok, see Settings ▸ AI) reads them through Whiteprint and writes a study plan note with must-know topics, a learning path and a to-do list.")
         subtitle.textColor = .secondaryLabelColor
 
         let drop = DropZone { [weak self] urls in self?.session.importFiles(urls) }
@@ -74,7 +75,6 @@ final class StudyPanelController: NSViewController, NSTableViewDataSource, NSTab
         errors.textColor = .systemRed
         errors.font = .systemFont(ofSize: 12)
 
-        let privacy = NSTextField(wrappingLabelWithString: "Text is extracted on your Mac. Only extracted text is shared with your own Claude client.")
         privacy.textColor = .secondaryLabelColor
         privacy.font = .systemFont(ofSize: 11)
         let lock = NSImageView(image: NSImage(systemSymbolName: "lock", accessibilityDescription: nil)!)
@@ -144,33 +144,44 @@ final class StudyPanelController: NSViewController, NSTableViewDataSource, NSTab
         errors.stringValue = session.importErrors.joined(separator: "\n")
         errors.isHidden = session.importErrors.isEmpty
 
-        let claude: URL?? = session.claudeLookup
-        switch claude {
-        case .none:
-            claudeHelp.stringValue = "Looking for Claude Code…"
-            claudeHelp.isHidden = false
-        case .some(.none):
-            claudeHelp.stringValue = """
-            Claude Code wasn't found. For the one-click button, install it from claude.com/claude-code, then run "claude" once in Terminal and log in with your Claude account.
-            Or use Claude Desktop: connect Whiteprint in Settings (⌘,), then pick the "study_plan" prompt.
-            """
-            claudeHelp.isHidden = false
-        case .some(.some):
-            claudeHelp.isHidden = true
-        }
+        privacy.stringValue = session.provider == .grok
+            ? "Text is extracted on your Mac. Only extracted text is sent to xAI, with your API key."
+            : "Text is extracted on your Mac. Only extracted text is shared with your own Claude client."
+        claudeHelp.stringValue = Self.providerHelp(session)
+        claudeHelp.isHidden = claudeHelp.stringValue.isEmpty
 
         let lines = session.log
         status.string = lines.joined(separator: "\n")
         status.scrollToEndOfDocument(nil)
         statusScroll.isHidden = lines.isEmpty
 
-        let hasClaude = { if case .some(.some) = claude { return true }; return false }()
-        generateButton.isEnabled = hasClaude && !session.isRunning && !session.imports.isEmpty && session.extracting.isEmpty
+        generateButton.isEnabled = session.isProviderReady && !session.isRunning && !session.imports.isEmpty && session.extracting.isEmpty
+        generateButton.toolTip = "Uses \(session.provider.name) (change it in Settings ▸ AI)"
         cancelButton.isHidden = !session.isRunning
 
-        if startWhenReady, claude != nil {
+        if startWhenReady, session.provider == .grok || session.claudeLookup != nil {
             startWhenReady = false
             if generateButton.isEnabled { generate(nil) }
+        }
+    }
+
+    /// What's missing before the chosen provider can run; empty when it's ready.
+    private static func providerHelp(_ session: StudySession) -> String {
+        switch session.provider {
+        case .grok:
+            return session.isProviderReady ? "" : "Add your xAI API key in Settings ▸ AI to build study plans with Grok."
+        case .claudeCode:
+            switch session.claudeLookup {
+            case .none:
+                return "Looking for Claude Code…"
+            case .some(.none):
+                return """
+                Claude Code wasn't found. For the one-click button, install it from claude.com/claude-code, then run "claude" once in Terminal and log in with your Claude account.
+                Or use Claude Desktop: connect Whiteprint in Settings (⌘,), then pick the "study_plan" prompt. Or switch to Grok in Settings ▸ AI.
+                """
+            case .some(.some):
+                return ""
+            }
         }
     }
 

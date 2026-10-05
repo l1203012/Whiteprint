@@ -9,7 +9,8 @@ extension Notification.Name {
 }
 
 /// The study panel's state, kept app-wide so a run survives closing the panel:
-/// imports in progress, the last errors, and the Claude Code run.
+/// imports in progress, the last errors, and the study plan run (Claude Code
+/// or Grok, as chosen in Settings ▸ AI).
 final class StudySession {
     enum RunState: Equatable {
         case idle, running, finished, failed(String)
@@ -25,12 +26,15 @@ final class StudySession {
     /// nil until the first lookup finishes, then the result.
     private(set) var claudeLookup: URL??
 
-    private var runner: ClaudeCodeRunner?
+    /// Answers the Grok runner's tool calls, like the MCP helper's.
+    private weak var tools: BridgeHandler?
+    private var cancelRun: (() -> Void)?
     private let queue = DispatchQueue(label: "io.github.l1203012.whiteprint.import", qos: .userInitiated)
     private static let logLimit = 200
 
-    init(store: StudyStore?) {
+    init(store: StudyStore?, tools: BridgeHandler?) {
         self.store = store
+        self.tools = tools
         imports = store?.imports ?? []
         NotificationCenter.default.addObserver(forName: .studyStoreDidChange, object: nil, queue: .main) { [weak self] _ in
             self?.refreshImports()
@@ -102,20 +106,45 @@ final class StudySession {
         changed()
     }
 
-    // MARK: Claude Code
+    // MARK: Study plan run
 
-    /// Starts `claude -p` over every import. The study plan note opens by
-    /// itself when Claude calls `build_study_plan`.
+    var provider: AIProvider { AISettings.shared.provider }
+
+    /// Whether the chosen provider is set up: Claude Code found, or a Grok key saved.
+    var isProviderReady: Bool {
+        switch provider {
+        case .claudeCode:
+            if case .some(.some) = claudeLookup { return true }
+            return false
+        case .grok:
+            return AISettings.shared.grokConfiguration != nil
+        }
+    }
+
+    /// Starts the chosen provider over every import. The study plan note
+    /// opens by itself when the agent calls `build_study_plan`.
     func generate() {
-        guard !isRunning, case .some(.some(let claude)) = claudeLookup else { return }
-        let runner = ClaudeCodeRunner(claudeURL: claude)
-        log = ["Starting Claude Code…"]
-        runState = .running
+        guard !isRunning else { return }
+        let ids = imports.map(\.id)
+        let onEvent: (ClaudeCodeRunner.Event) -> Void = { [weak self] event in self?.handle(event) }
         do {
-            try runner.start(importIDs: imports.map(\.id), helperURL: BridgePaths.helperExecutable) { [weak self] event in
-                self?.handle(event)
+            switch provider {
+            case .claudeCode:
+                guard case .some(.some(let claude)) = claudeLookup else { return }
+                let runner = ClaudeCodeRunner(claudeURL: claude, store: store)
+                start("Starting Claude Code…")
+                try runner.start(importIDs: ids, helperURL: BridgePaths.helperExecutable, onEvent: onEvent)
+                cancelRun = runner.cancel
+            case .grok:
+                guard let configuration = AISettings.shared.grokConfiguration, let tools else { return }
+                let runner = GrokRunner(
+                    configuration: configuration, tools: AgentToolBridge.runnerTools(),
+                    execute: AgentToolBridge.executor(handler: tools)
+                )
+                start("Starting Grok (\(configuration.model))…")
+                try runner.start(importIDs: ids, onEvent: onEvent)
+                cancelRun = runner.cancel
             }
-            self.runner = runner
         } catch {
             runState = .failed(errorLine(error))
             log.append(errorLine(error))
@@ -123,10 +152,15 @@ final class StudySession {
         changed()
     }
 
+    private func start(_ line: String) {
+        log = [line]
+        runState = .running
+    }
+
     func cancel() {
         guard isRunning else { return }
-        runner?.cancel()
-        runner = nil
+        cancelRun?()
+        cancelRun = nil
         runState = .idle
         append("Cancelled.")
     }
@@ -139,11 +173,11 @@ final class StudySession {
             let line = text.trimmingCharacters(in: .whitespacesAndNewlines)
             if !line.isEmpty { append(line) }
         case .finished:
-            runner = nil
+            cancelRun = nil
             runState = .finished
-            append("Done. The study plan opened in a new window.")
+            append("Done. The study plan opened in a new tab.")
         case .failed(let message):
-            runner = nil
+            cancelRun = nil
             runState = .failed(message)
             append(message)
         }

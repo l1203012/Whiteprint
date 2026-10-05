@@ -14,9 +14,13 @@ protocol NoteWorkspace: AnyObject {
     /// first if needed. The change is undoable and autosaved.
     func edit<T>(noteAt url: URL, actionName: String, _ change: (inout Note) throws -> T) throws -> T
 
-    /// Saves a new note into the notes folder, named after `title`, opens it
-    /// and returns its file URL.
-    func createNote(_ note: Note, title: String) throws -> URL
+    /// The note's folder relative to the notes folder (`Courses/Networks`);
+    /// nil or empty at the top level or outside it.
+    func folderPath(of url: URL) -> String?
+
+    /// Saves a new note named after `title` into `folder` (relative to the notes
+    /// folder, created if needed; nil = top level), opens it and returns its URL.
+    func createNote(_ note: Note, title: String, folder: String?) throws -> URL
 }
 
 enum WorkspaceError: Error, CustomStringConvertible {
@@ -25,6 +29,7 @@ enum WorkspaceError: Error, CustomStringConvertible {
     case fileNotFound(String)
     case unsupportedFile(String)
     case studyUnavailable
+    case noCards
     /// Drawing source in which nothing compiled; carries the compile errors.
     case nothingDrawn([String])
 
@@ -35,6 +40,7 @@ enum WorkspaceError: Error, CustomStringConvertible {
         case .fileNotFound(let path): return "no file at \(path)"
         case .unsupportedFile(let name): return "\(name): unsupported file type (use PDF, DOCX, DOC or PPTX)"
         case .studyUnavailable: return "the study store couldn't be opened"
+        case .noCards: return "no cards given; each card needs a question and an answer"
         case .nothingDrawn(let errors): return (["nothing to draw, not saved:"] + errors).joined(separator: "\n")
         }
     }

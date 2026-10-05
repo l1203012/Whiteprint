@@ -9,6 +9,7 @@ enum MainMenu {
         main.addItem(submenu(fileMenu(recentDelegate: recentDelegate)))
         main.addItem(submenu(editMenu()))
         main.addItem(submenu(viewMenu()))
+        main.addItem(submenu(formatMenu()))
         main.addItem(submenu(noteMenu()))
         let window = windowMenu()
         main.addItem(submenu(window))
@@ -41,6 +42,8 @@ enum MainMenu {
     private static func fileMenu(recentDelegate: NSMenuDelegate) -> NSMenu {
         let menu = NSMenu(title: "File")
         menu.addItem(item("New Note", #selector(AppDelegate.newNote(_:)), "n"))
+        menu.addItem(item("New Tab", #selector(NSResponder.newWindowForTab(_:)), "t"))
+        menu.addItem(item("New Folder", #selector(AppDelegate.newFolder(_:)), "n", [.command, .shift]))
         menu.addItem(item("Open…", #selector(NSDocumentController.openDocument(_:)), "o"))
         let recent = NSMenu(title: "Open Recent")
         recent.delegate = recentDelegate
@@ -96,6 +99,15 @@ enum MainMenu {
         menu.addItem(item("Toggle Sidebar", #selector(NSSplitViewController.toggleSidebar(_:)), "\\"))
         menu.addItem(item("Command Palette", #selector(AppDelegate.showCommandPalette(_:)), "k"))
         menu.addItem(.separator())
+        let layout = NSMenu(title: "Page Layout")
+        for mode in PageLayoutMode.allCases {
+            let option = item(NoteTouchBar.title(mode), #selector(AppDelegate.setPageLayout(_:)))
+            option.representedObject = mode.rawValue
+            layout.addItem(option)
+        }
+        menu.addItem(submenu(layout))
+        menu.addItem(item("Show Markdown Syntax", #selector(AppDelegate.toggleMarkdownSyntax(_:)), "m", [.command, .shift]))
+        menu.addItem(.separator())
         menu.addItem(item("Enter Full Screen", #selector(NSWindow.toggleFullScreen(_:)), "f", [.command, .control]))
         return menu
     }
@@ -104,8 +116,41 @@ enum MainMenu {
         let menu = NSMenu(title: "Note")
         menu.addItem(item("Add Page", #selector(NoteWindowController.addPage(_:)), "n", [.command, .option]))
         menu.addItem(item("Insert Drawing", #selector(NoteWindowController.insertDrawing(_:)), "d", [.command, .shift]))
+        menu.addItem(item("Insert Flashcards", #selector(NoteWindowController.insertFlashcards(_:)), "f", [.command, .shift]))
         menu.addItem(.separator())
+        menu.addItem(item("Study Flashcards…", #selector(AppDelegate.studyFlashcards(_:))))
         menu.addItem(item("Generate Study Plan…", #selector(AppDelegate.generateStudyPlan(_:))))
+        return menu
+    }
+
+    /// Text formatting, sent to the editor as `EditorCommand`s.
+    private static func formatMenu() -> NSMenu {
+        let menu = NSMenu(title: "Format")
+        let groups: [[(String, EditorCommand, String, NSEvent.ModifierFlags)]] = [
+            [
+                ("Heading 1", .heading1, "1", [.command, .option]),
+                ("Heading 2", .heading2, "2", [.command, .option]),
+                ("Heading 3", .heading3, "3", [.command, .option]),
+                ("Body", .body, "0", [.command, .option]),
+            ],
+            [("Bold", .bold, "b", .command), ("Italic", .italic, "i", .command), ("Inline Code", .inlineCode, "", .command)],
+            [
+                ("Bulleted List", .bulletList, "8", [.command, .option]),
+                ("Numbered List", .numberedList, "7", [.command, .option]),
+                ("Checklist", .checklist, "9", [.command, .option]),
+                ("Quote", .quote, "", .command),
+                ("Code Block", .codeBlock, "", .command),
+                ("Divider", .divider, "", .command),
+            ],
+        ]
+        for (index, group) in groups.enumerated() {
+            if index > 0 { menu.addItem(.separator()) }
+            for (title, command, key, modifiers) in group {
+                let format = item(title, #selector(NoteWindowController.performEditorCommand(_:)), key, modifiers)
+                format.representedObject = command.rawValue
+                menu.addItem(format)
+            }
+        }
         return menu
     }
 

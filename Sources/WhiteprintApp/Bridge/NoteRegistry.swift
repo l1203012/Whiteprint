@@ -21,11 +21,15 @@ final class NoteRegistry {
         urlsByID[id.trimmingCharacters(in: .whitespaces).lowercased()]
     }
 
-    /// Keeps the id of a file that was renamed or moved.
+    /// Keeps the ids of a file that was renamed or moved, or of every note
+    /// in a folder that was.
     func move(from old: URL, to new: URL) {
-        let old = old.canonicalFile, new = new.canonicalFile
-        guard old != new, let id = idsByPath.removeValue(forKey: old.path) else { return }
-        idsByPath[new.path] = id
-        urlsByID[id] = new
+        guard old.canonicalFile != new.canonicalFile else { return }
+        for (id, url) in urlsByID {
+            guard let moved = NoteFiles.relocated(url, from: old, to: new) else { continue }
+            idsByPath[url.path] = nil
+            idsByPath[moved.path] = id
+            urlsByID[id] = moved
+        }
     }
 }
