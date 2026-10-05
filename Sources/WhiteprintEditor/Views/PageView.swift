@@ -2,7 +2,8 @@ import AppKit
 import WhiteprintRender
 
 /// One blueprint sheet: blue background, faint grid, rounded corners and a
-/// soft shadow, with its blocks stacked inside the padding.
+/// soft shadow, with its blocks stacked inside the padding. In A4 layout,
+/// dashed guides mark where printed pages break.
 ///
 /// Pages far from the viewport aren't realized: they have no block views,
 /// just an estimated height, until they scroll near.
@@ -19,6 +20,10 @@ final class PageView: NSView {
     var onClickBelowBlocks: ((PageView) -> Void)?
 
     private(set) var blockViews: [NSView] = []
+    /// Offsets from the sheet top where printed pages break.
+    private(set) var pageBreaks: [CGFloat] = [] {
+        didSet { if oldValue != pageBreaks { needsDisplay = true } }
+    }
 
     init(pageID: PageID, palette: BlueprintPalette) {
         self.pageID = pageID
@@ -55,10 +60,11 @@ final class PageView: NSView {
     /// Lays the blocks out top to bottom and returns the sheet height.
     func layoutBlocks(_ geometry: PageGeometry) -> CGFloat {
         let inset = PageGeometry.shadowInset
-        var y = inset + PageGeometry.topPadding
+        let top = inset + geometry.topPadding
+        var y = top
         if isRealized {
             for (i, view) in blockViews.enumerated() {
-                if i > 0 { y += PageGeometry.blockSpacing }
+                if i > 0 { y += geometry.blockSpacing }
                 let height: CGFloat
                 switch view {
                 case let text as BlockTextView:
@@ -69,6 +75,8 @@ final class PageView: NSView {
                     height = text.frame.height
                 case let drawing as DrawingBlockView:
                     height = drawing.height(forWidth: geometry.textWidth)
+                case let deck as DeckBlockView:
+                    height = deck.height(forWidth: geometry.textWidth)
                 default:
                     height = view.frame.height
                 }
@@ -81,8 +89,9 @@ final class PageView: NSView {
         } else {
             y += estimatedContentHeight
         }
-        y += PageGeometry.bottomPadding
-        return max(y - inset, geometry.minPageHeight)
+        let sheet = geometry.sheet(contentHeight: y - top)
+        pageBreaks = sheet.breaks
+        return sheet.height
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -125,6 +134,29 @@ final class PageView: NSView {
         let edge = NSBezierPath(roundedRect: sheet.insetBy(dx: 0.5, dy: 0.5),
                                 xRadius: PageGeometry.cornerRadius, yRadius: PageGeometry.cornerRadius)
         edge.stroke()
+        drawPageBreaks(in: sheet)
+    }
+
+    /// A dashed line across the sheet at each printed page break, with the
+    /// number of the page that starts there.
+    private func drawPageBreaks(in sheet: NSRect) {
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 9.5, weight: .medium),
+            .foregroundColor: palette.muted.withAlphaComponent(0.5),
+        ]
+        for (index, offset) in pageBreaks.enumerated() {
+            let y = (sheet.minY + offset).rounded() + 0.5
+            let line = NSBezierPath()
+            line.move(to: NSPoint(x: sheet.minX, y: y))
+            line.line(to: NSPoint(x: sheet.maxX, y: y))
+            line.lineWidth = 1
+            line.setLineDash([4, 4], count: 2, phase: 0)
+            palette.text.withAlphaComponent(0.22).setStroke()
+            line.stroke()
+            let label = "\(index + 2)" as NSString
+            let size = label.size(withAttributes: attributes)
+            label.draw(at: NSPoint(x: sheet.maxX - size.width - 10, y: y + 3), withAttributes: attributes)
+        }
     }
 
     override func mouseDown(with event: NSEvent) {

@@ -235,7 +235,7 @@ final class NoteEditorViewTests: XCTestCase {
 
     func testReturnOnASelectedDrawingStartsTextAfterIt() throws {
         try open("```wp id=d1\nx\n```\n\n```wp id=d2\ny\n```")
-        editor.focus(.drawing(block(0, 0).id))
+        editor.focus(.block(block(0, 0).id))
         try press(.enter)
         try type("between")
         XCTAssertEqual(firstPageBlocks, [.drawing(Drawing(id: "d1", source: "x")), .text("between"),

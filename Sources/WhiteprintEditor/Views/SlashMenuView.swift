@@ -153,6 +153,7 @@ final class SlashMenuView: NSView {
         case .codeBlock: return "chevron.left.forwardslash.chevron.right"
         case .divider: return "minus"
         case .drawing: return "square.on.circle"
+        case .flashcards: return "rectangle.on.rectangle.angled"
         case .newPage: return "doc.badge.plus"
         case .heading1, .heading2, .heading3: return "textformat.size"
         }

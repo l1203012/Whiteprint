@@ -230,6 +230,78 @@ final class MarkdownStylerTests: XCTestCase {
         MarkdownStyler.apply(to: NSTextStorage(), in: NSRange(location: 0, length: 0), palette: palette)
     }
 
+    // MARK: Concealing markup
+
+    private func concealed(_ markdown: String, revealing: NSRange? = nil) -> NSTextStorage {
+        let storage = NSTextStorage(string: markdown)
+        MarkdownStyler.apply(to: storage, palette: palette, concealsMarkup: true, revealing: revealing)
+        return storage
+    }
+
+    /// Each run of `markupKey` as `"text=markup"`, in order.
+    private func markup(_ text: NSAttributedString) -> [String] {
+        var runs: [String] = []
+        text.enumerateAttribute(MarkdownStyler.markupKey, in: NSRange(location: 0, length: text.length)) { value, range, _ in
+            guard let value = value as? String else { return }
+            runs.append((text.string as NSString).substring(with: range) + "=" + value)
+        }
+        return runs
+    }
+
+    func testShownMarkupIsNotMarked() {
+        XCTAssertEqual(markup(styled("# a **b** `c`\n- d\n---")), [])
+    }
+
+    func testConcealedBlockMarkers() {
+        let text = concealed("# Title\n- item\n- [ ] open\n- [x] done\n> quote\n1. one\n---")
+        XCTAssertEqual(markup(text), [
+            "# =hidden", "-=bullet", "- =hidden", "[ ]=checkbox", "- =hidden", "[x]=checkedBox", "> =hidden", "---=rule",
+        ])
+        let box = (text.string as NSString).range(of: "[x]").location
+        XCTAssertEqual(color(text, at: box), .clear, "the box is drawn by the editor")
+    }
+
+    func testConcealedInlineMarkup() {
+        let markdown = "a **b** _c_ `d` [e](f)"
+        XCTAssertEqual(markup(concealed(markdown)), ["**=hidden", "**=hidden", "_=hidden", "_=hidden", "`=hidden", "`=hidden",
+                                                    "[=hidden", "](f)=hidden"])
+        XCTAssertTrue(isBold(font(concealed(markdown), at: 4)))
+    }
+
+    func testConcealedFenceLinesButNotCode() {
+        XCTAssertEqual(markup(concealed("```swift\nlet **x**\n```")), ["```swift=hidden", "```=hidden"])
+    }
+
+    func testTheRevealedLineKeepsItsMarkup() {
+        let markdown = "# One\n**two**\n# Three"
+        XCTAssertEqual(markup(concealed(markdown, revealing: NSRange(location: 8, length: 0))), ["# =hidden", "# =hidden"])
+        XCTAssertEqual(markup(concealed(markdown, revealing: NSRange(location: 3, length: 8))), ["# =hidden"])
+        XCTAssertEqual(markup(concealed(markdown, revealing: NSRange(location: 6, length: 0))), ["# =hidden", "# =hidden"],
+                       "caret at the start of a line reveals that line")
+        let length = (markdown as NSString).length
+        XCTAssertEqual(markup(concealed(markdown, revealing: NSRange(location: length, length: 0))), ["# =hidden", "**=hidden", "**=hidden"])
+        XCTAssertEqual(markup(concealed("a\n# b\n", revealing: NSRange(location: 6, length: 0))), ["# =hidden"],
+                       "caret on the empty last line")
+    }
+
+    func testConcealedListsIndentByTheShownMarker() {
+        let task = paragraph(concealed("- [ ] task"), at: 7)
+        let width = ("[ ] " as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 15)]).width
+        XCTAssertEqual(task?.headIndent ?? 0, ceil(width), accuracy: 0.5)
+        XCTAssertEqual(paragraph(concealed("> quote"), at: 3)?.headIndent, paragraph(concealed("> quote"), at: 3)?.firstLineHeadIndent)
+    }
+
+    func testIncrementalConcealingMatchesFull() {
+        let storage = concealed(document)
+        let revealing = NSRange(location: 2, length: 0)
+        storage.replaceCharacters(in: NSRange(location: 2, length: 0), with: "**N**")
+        MarkdownStyler.apply(to: storage, in: NSRange(location: 2, length: 5), palette: palette,
+                             concealsMarkup: true, revealing: revealing)
+        let full = NSTextStorage(string: storage.string)
+        MarkdownStyler.apply(to: full, palette: palette, concealsMarkup: true, revealing: revealing)
+        XCTAssertTrue(storage.isEqual(to: full))
+    }
+
     // MARK: Presentation
 
     func testPresentationRemovesMarkup() {

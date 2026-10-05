@@ -33,6 +33,11 @@ struct EditorBlock: Equatable {
         return nil
     }
 
+    var deck: CardDeck? {
+        if case .cards(let deck) = content { return deck }
+        return nil
+    }
+
     var isText: Bool { text != nil }
 }
 
@@ -55,7 +60,7 @@ struct BlockLocation: Equatable {
 /// Text offsets are UTF-16, matching `NSTextView`.
 struct EditorDocument: Equatable {
     private(set) var pages: [EditorPage]
-    /// Front matter and the drawing id high-water mark; its pages are unused.
+    /// Front matter and the drawing and deck id high-water marks; its pages are unused.
     private var base: Note
     private var lastID = 0
 
@@ -132,39 +137,68 @@ struct EditorDocument: Equatable {
         pages[at.page].blocks[at.block].content = .drawing(drawing)
     }
 
+    /// Replaces a deck's title and cards, keeping its deck id.
+    mutating func updateDeck(_ id: BlockID, _ deck: CardDeck) {
+        guard let at = location(of: id), let old = self[at].deck else { return }
+        var deck = deck
+        deck.id = old.id
+        pages[at.page].blocks[at.block].content = .cards(deck)
+    }
+
     /// Splits text block `id` at `offset` and puts a new drawing between the
     /// halves. Returns the drawing's block id.
     @discardableResult
     mutating func insertDrawing(source: String, splitting id: BlockID, at offset: Int) -> BlockID? {
-        guard let at = location(of: id), let text = self[at].text else { return nil }
-        let ns = text as NSString
-        let offset = min(max(offset, 0), ns.length)
-        let before = Self.trimmingNewlines(ns.substring(to: offset), leading: false)
-        let after = Self.trimmingNewlines(ns.substring(from: offset), leading: true)
-        let drawing = makeDrawingBlock(source: source)
-        var replacement: [EditorBlock] = []
-        if !before.isEmpty {
-            replacement.append(EditorBlock(id: id, content: .text(before)))
-        }
-        replacement.append(drawing)
-        replacement.append(EditorBlock(id: before.isEmpty ? id : makeID(), content: .text(after)))
-        pages[at.page].blocks.replaceSubrange(at.block...at.block, with: replacement)
-        normalize(page: at.page)
-        return drawing.id
+        guard block(id)?.isText == true else { return nil }
+        return insert(makeDrawingBlock(source: source), splitting: id, at: offset)
     }
 
     /// Adds a drawing at the end of a page, before its trailing empty text block.
     @discardableResult
     mutating func appendDrawing(source: String, toPage page: Int) -> BlockID {
+        append(makeDrawingBlock(source: source), toPage: page)
+    }
+
+    /// Like `insertDrawing`, for a flashcard deck (which gets a fresh deck id).
+    @discardableResult
+    mutating func insertDeck(_ deck: CardDeck, splitting id: BlockID, at offset: Int) -> BlockID? {
+        guard block(id)?.isText == true else { return nil }
+        return insert(makeDeckBlock(deck), splitting: id, at: offset)
+    }
+
+    /// Like `appendDrawing`, for a flashcard deck (which gets a fresh deck id).
+    @discardableResult
+    mutating func appendDeck(_ deck: CardDeck, toPage page: Int) -> BlockID {
+        append(makeDeckBlock(deck), toPage: page)
+    }
+
+    /// Splits text block `id` at `offset` around `block`.
+    private mutating func insert(_ block: EditorBlock, splitting id: BlockID, at offset: Int) -> BlockID? {
+        guard let at = location(of: id), let text = self[at].text else { return nil }
+        let ns = text as NSString
+        let offset = min(max(offset, 0), ns.length)
+        let before = Self.trimmingNewlines(ns.substring(to: offset), leading: false)
+        let after = Self.trimmingNewlines(ns.substring(from: offset), leading: true)
+        var replacement: [EditorBlock] = []
+        if !before.isEmpty {
+            replacement.append(EditorBlock(id: id, content: .text(before)))
+        }
+        replacement.append(block)
+        replacement.append(EditorBlock(id: before.isEmpty ? id : makeID(), content: .text(after)))
+        pages[at.page].blocks.replaceSubrange(at.block...at.block, with: replacement)
+        normalize(page: at.page)
+        return block.id
+    }
+
+    private mutating func append(_ block: EditorBlock, toPage page: Int) -> BlockID {
         let page = min(max(page, 0), pages.count - 1)
-        let drawing = makeDrawingBlock(source: source)
         var index = pages[page].blocks.count
         if let last = pages[page].blocks.last, last.text?.isEmpty == true {
             index -= 1
         }
-        pages[page].blocks.insert(drawing, at: index)
+        pages[page].blocks.insert(block, at: index)
         normalize(page: page)
-        return drawing.id
+        return block.id
     }
 
     /// Inserts an empty page after `page` and returns its text block.
@@ -180,7 +214,7 @@ struct EditorDocument: Equatable {
     mutating func removePage(_ page: Int) {
         guard pages.count > 1, pages.indices.contains(page) else { return }
         for block in pages[page].blocks {
-            if let drawing = block.drawing { retireDrawingID(drawing.id) }
+            retireID(of: block)
         }
         pages.remove(at: page)
     }
@@ -197,7 +231,7 @@ struct EditorDocument: Equatable {
     @discardableResult
     mutating func removeBlock(_ id: BlockID) -> BlockID? {
         guard let at = location(of: id) else { return nil }
-        if let drawing = self[at].drawing { retireDrawingID(drawing.id) }
+        retireID(of: self[at])
         pages[at.page].blocks.remove(at: at.block)
         normalize(page: at.page)
         let blocks = pages[at.page].blocks
@@ -327,16 +361,17 @@ struct EditorDocument: Equatable {
         return result
     }
 
-    /// Takes `snapshot`'s content (for undo) without giving back drawing ids
-    /// handed out since, so an id is never reused.
+    /// Takes `snapshot`'s content (for undo) without giving back drawing or
+    /// deck ids handed out since, so an id is never reused.
     func restoring(_ snapshot: EditorDocument) -> EditorDocument {
         var restored = snapshot
         restored.lastID = max(lastID, snapshot.lastID)
-        let key = "last-drawing"
-        let current = base.frontMatter[key].flatMap { Int($0) } ?? 0
-        let old = snapshot.base.frontMatter[key].flatMap { Int($0) } ?? 0
-        if current > old {
-            restored.base.frontMatter[key] = String(current)
+        for key in ["last-drawing", "last-cards"] {
+            let current = base.frontMatter[key].flatMap { Int($0) } ?? 0
+            let old = snapshot.base.frontMatter[key].flatMap { Int($0) } ?? 0
+            if current > old {
+                restored.base.frontMatter[key] = String(current)
+            }
         }
         return restored
     }
@@ -400,6 +435,12 @@ struct EditorDocument: Equatable {
         EditorBlock(id: makeID(), content: .drawing(Drawing(id: newDrawingID(), source: source)))
     }
 
+    private mutating func makeDeckBlock(_ deck: CardDeck) -> EditorBlock {
+        var deck = deck
+        deck.id = newDeckID()
+        return EditorBlock(id: makeID(), content: .cards(deck))
+    }
+
     /// A deck id that's unused and recorded as used, via `Note`'s own bookkeeping.
     private mutating func newDeckID() -> String {
         var scratch = note
@@ -416,9 +457,14 @@ struct EditorDocument: Equatable {
         return id
     }
 
-    private mutating func retireDrawingID(_ id: String) {
+    /// Records a removed drawing's or deck's id as used.
+    private mutating func retireID(of block: EditorBlock) {
         var scratch = note
-        try? scratch.deleteDrawing(id)
+        switch block.content {
+        case .drawing(let drawing): try? scratch.deleteDrawing(drawing.id)
+        case .cards(let deck): try? scratch.deleteDeck(deck.id)
+        case .text: return
+        }
         base.frontMatter = scratch.frontMatter
     }
 

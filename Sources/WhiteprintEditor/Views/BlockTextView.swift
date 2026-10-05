@@ -7,10 +7,14 @@ protocol BlockTextViewDelegate: AnyObject {
     func blockTextViewDidChangeHeight(_ view: BlockTextView)
     func blockTextView(_ view: BlockTextView, toggleCheckboxAt location: Int)
     func blockTextViewDidBecomeFirstResponder(_ view: BlockTextView)
+    func blockTextViewTouchBar(_ view: BlockTextView) -> NSTouchBar?
 }
 
 /// One run of Markdown text: a transparent, auto-height `NSTextView` with
 /// white text, restyled by `MarkdownStyler` as it's edited.
+///
+/// With `concealsMarkup`, the markup of every paragraph but the ones holding
+/// the caret or selection is hidden (see `MarkdownLayoutManager`).
 final class BlockTextView: NSTextView, NSTextStorageDelegate {
     static let placeholderText = "Type / for commands"
 
@@ -21,18 +25,40 @@ final class BlockTextView: NSTextView, NSTextStorageDelegate {
     var isAlonePlaceholder = false {
         didSet { if oldValue != isAlonePlaceholder { needsDisplay = true } }
     }
+    var fontSize: CGFloat {
+        didSet {
+            guard oldValue != fontSize else { return }
+            typingAttributes = TextStyle.base(palette, fontSize: fontSize)
+            minSize = NSSize(width: 0, height: TextStyle.lineHeight(fontSize))
+            restyle()
+        }
+    }
+    var concealsMarkup: Bool {
+        didSet {
+            guard oldValue != concealsMarkup else { return }
+            revealedRange = revealedParagraphs
+            restyle()
+        }
+    }
+    /// The paragraphs whose markup shows while concealing, as last styled.
+    private(set) var revealedRange: NSRange?
+    private var hasFocus = false
 
-    init(blockID: BlockID, text: String, palette: BlueprintPalette, width: CGFloat) {
+    init(blockID: BlockID, text: String, palette: BlueprintPalette, width: CGFloat,
+         fontSize: CGFloat = MarkdownStyler.defaultFontSize, concealsMarkup: Bool = false) {
         self.blockID = blockID
         self.palette = palette
+        self.fontSize = fontSize
+        self.concealsMarkup = concealsMarkup
         let storage = NSTextStorage()
-        let layout = NSLayoutManager()
+        let layout = MarkdownLayoutManager()
+        layout.palette = palette
         storage.addLayoutManager(layout)
         let container = NSTextContainer(size: NSSize(width: width, height: .greatestFiniteMagnitude))
         container.widthTracksTextView = true
         container.lineFragmentPadding = 0
         layout.addTextContainer(container)
-        super.init(frame: NSRect(x: 0, y: 0, width: width, height: HeightEstimate.bodyLineHeight), textContainer: container)
+        super.init(frame: NSRect(x: 0, y: 0, width: width, height: TextStyle.lineHeight(fontSize)), textContainer: container)
 
         storage.delegate = self
         drawsBackground = false
@@ -49,11 +75,11 @@ final class BlockTextView: NSTextView, NSTextStorageDelegate {
         textContainerInset = .zero
         isVerticallyResizable = true
         isHorizontallyResizable = false
-        minSize = NSSize(width: 0, height: HeightEstimate.bodyLineHeight)
+        minSize = NSSize(width: 0, height: TextStyle.lineHeight(fontSize))
         maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
         insertionPointColor = palette.text
         selectedTextAttributes = [.backgroundColor: palette.accent.withAlphaComponent(0.32)]
-        typingAttributes = TextStyle.base(palette)
+        typingAttributes = TextStyle.base(palette, fontSize: fontSize)
         setAccessibilityLabel("Text block")
         setText(text)
     }
@@ -68,7 +94,7 @@ final class BlockTextView: NSTextView, NSTextStorageDelegate {
     func setText(_ text: String) {
         guard let storage = textStorage, storage.string != text else { return }
         storage.replaceCharacters(in: NSRange(location: 0, length: storage.length),
-                                  with: NSAttributedString(string: text, attributes: TextStyle.base(palette)))
+                                  with: NSAttributedString(string: text, attributes: TextStyle.base(palette, fontSize: fontSize)))
         sizeToFit()
     }
 
@@ -79,8 +105,65 @@ final class BlockTextView: NSTextView, NSTextStorageDelegate {
         range editedRange: NSRange, changeInLength delta: Int
     ) {
         guard editedMask.contains(.editedCharacters) else { return }
+        if let revealed = revealedRange {
+            revealedRange = Self.range(revealed, afterEditing: editedRange, delta: delta, in: textStorage.string as NSString)
+        }
         let whole = editedRange.length == textStorage.length
-        MarkdownStyler.apply(to: textStorage, in: whole ? nil : editedRange, palette: palette)
+        style(textStorage, in: whole ? nil : editedRange)
+    }
+
+    private func style(_ storage: NSTextStorage, in range: NSRange?) {
+        MarkdownStyler.apply(to: storage, in: range, palette: palette, fontSize: fontSize,
+                             concealsMarkup: concealsMarkup, revealing: revealedRange)
+    }
+
+    /// Restyles everything, e.g. after the font size or concealing changed.
+    private func restyle() {
+        guard let storage = textStorage, storage.length > 0 else { return }
+        style(storage, in: nil)
+        sizeToFit()
+    }
+
+    /// The paragraphs that should show their markup now: the caret's or the
+    /// selection's, while focused and concealing.
+    private var revealedParagraphs: NSRange? {
+        guard concealsMarkup, hasFocus else { return nil }
+        return (string as NSString).paragraphRange(for: selectedRange())
+    }
+
+    /// Reveals the markup of the caret's paragraphs and conceals it again in
+    /// the ones the caret left.
+    private func updateRevealedParagraphs() {
+        let revealed = revealedParagraphs
+        guard revealed != revealedRange, let storage = textStorage else { return }
+        let previous = revealedRange
+        revealedRange = revealed
+        for range in [previous, revealed].compactMap({ $0 }) {
+            let location = min(range.location, storage.length)
+            style(storage, in: NSRange(location: location, length: min(range.length, storage.length - location)))
+        }
+        sizeToFit()
+    }
+
+    /// Where `range` is after an edit that left `edited` (in the new text)
+    /// and changed the length by `delta`: moved along, untouched, or grown to
+    /// the paragraphs of both when they meet.
+    static func range(_ range: NSRange, afterEditing edited: NSRange, delta: Int, in text: NSString) -> NSRange {
+        let oldEditEnd = NSMaxRange(edited) - delta
+        if oldEditEnd < range.location {
+            return NSRange(location: range.location + delta, length: range.length)
+        }
+        if edited.location > NSMaxRange(range) {
+            return range
+        }
+        let start = min(range.location, edited.location, text.length)
+        let end = min(text.length, max(NSMaxRange(range) + delta, NSMaxRange(edited)))
+        return text.paragraphRange(for: NSRange(location: start, length: max(0, end - start)))
+    }
+
+    override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
+        super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
+        if !stillSelecting { updateRevealedParagraphs() }
     }
 
     // MARK: Geometry
@@ -164,7 +247,9 @@ final class BlockTextView: NSTextView, NSTextStorageDelegate {
     override func becomeFirstResponder() -> Bool {
         let accepted = super.becomeFirstResponder()
         if accepted {
+            hasFocus = true
             needsDisplay = true
+            updateRevealedParagraphs()
             blockDelegate?.blockTextViewDidBecomeFirstResponder(self)
         }
         return accepted
@@ -172,8 +257,16 @@ final class BlockTextView: NSTextView, NSTextStorageDelegate {
 
     override func resignFirstResponder() -> Bool {
         let resigned = super.resignFirstResponder()
-        if resigned { needsDisplay = true }
+        if resigned {
+            hasFocus = false
+            needsDisplay = true
+            updateRevealedParagraphs()
+        }
         return resigned
+    }
+
+    override func makeTouchBar() -> NSTouchBar? {
+        blockDelegate?.blockTextViewTouchBar(self) ?? super.makeTouchBar()
     }
 
     // MARK: Drawing
@@ -181,7 +274,7 @@ final class BlockTextView: NSTextView, NSTextStorageDelegate {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         guard string.isEmpty, isAlonePlaceholder || window?.firstResponder === self else { return }
-        var attributes = TextStyle.base(palette)
+        var attributes = TextStyle.base(palette, fontSize: fontSize)
         attributes[.foregroundColor] = palette.muted.withAlphaComponent(0.55)
         (Self.placeholderText as NSString).draw(at: lineRect(at: 0).origin, withAttributes: attributes)
     }
@@ -189,14 +282,19 @@ final class BlockTextView: NSTextView, NSTextStorageDelegate {
 
 /// Base attributes for editor text; `MarkdownStyler` refines them per paragraph.
 enum TextStyle {
-    static func base(_ palette: BlueprintPalette) -> [NSAttributedString.Key: Any] {
+    static func base(_ palette: BlueprintPalette, fontSize: CGFloat = MarkdownStyler.defaultFontSize) -> [NSAttributedString.Key: Any] {
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineHeightMultiple = 1.2
         paragraph.paragraphSpacing = 4
         return [
-            .font: NSFont.systemFont(ofSize: MarkdownStyler.defaultFontSize),
+            .font: NSFont.systemFont(ofSize: fontSize),
             .foregroundColor: palette.text,
             .paragraphStyle: paragraph,
         ]
+    }
+
+    /// The minimum height of a line of body text.
+    static func lineHeight(_ fontSize: CGFloat) -> CGFloat {
+        (HeightEstimate.bodyLineHeight * fontSize / MarkdownStyler.defaultFontSize).rounded()
     }
 }
