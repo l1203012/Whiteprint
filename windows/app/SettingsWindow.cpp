@@ -9,8 +9,15 @@
 
 #include <QButtonGroup>
 #include <QHBoxLayout>
+#include <QGuiApplication>
+#include <QPainter>
+#include <QStyle>
+#include <QWindow>
 #include <QPainter>
 #include <QPointer>
+#include <QScreen>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QStackedWidget>
 #include <QTabBar>
 #include <QToolButton>
@@ -92,7 +99,12 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QWidget(parent, Qt::Window | Q
     toolbar->addStretch(1);
     auto *group = new QButtonGroup(this);
     for (int i = 0; i < pages.size(); ++i) {
-        m_pages->addWidget(pages[i]);
+        auto *scroll = new QScrollArea;
+        scroll->setFrameShape(QFrame::NoFrame);
+        scroll->setWidgetResizable(true);
+        scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        scroll->setWidget(pages[i]);
+        m_pages->addWidget(scroll);
         auto *tab = new ToolbarTab(tabs[i].first, tabs[i].second);
         group->addButton(tab, i);
         toolbar->addWidget(tab);
@@ -132,9 +144,15 @@ void SettingsWindow::setCurrentTab(int index)
         m_pages->widget(i)->setSizePolicy(i == index ? QSizePolicy::Preferred : QSizePolicy::Ignored,
                                           i == index ? QSizePolicy::Preferred : QSizePolicy::Ignored);
     m_pages->setCurrentIndex(index);
-    QWidget *current = m_pages->widget(index);
-    const int pageHeight = qMax(current->sizeHint().height(), current->layout() ? current->layout()->totalHeightForWidth(current->width()) : 0);
-    m_pages->setFixedHeight(pageHeight);
+    QWidget *current = page(index);
+    const int pageWidth = current->sizeHint().width();
+    const int pageHeight = qMax(current->sizeHint().height(), current->layout() ? current->layout()->totalHeightForWidth(pageWidth) : 0);
+    // Cap the height to the screen (minus the toolbar, title bar and some margin); taller pages scroll.
+    const QScreen *screen = windowHandle() && windowHandle()->screen() ? windowHandle()->screen() : QGuiApplication::primaryScreen();
+    const int available = screen ? screen->availableGeometry().height() - 160 : pageHeight;
+    const int height = qMin(pageHeight, qMax(240, available));
+    m_pages->setFixedHeight(height);
+    m_pages->setFixedWidth(pageWidth + (height < pageHeight ? style()->pixelMetric(QStyle::PM_ScrollBarExtent) : 0));
     setWindowTitle(titles[index]);
     if (auto *group = findChild<QButtonGroup *>())
         if (auto *button = group->button(index))
@@ -144,7 +162,7 @@ void SettingsWindow::setCurrentTab(int index)
 
 QWidget *SettingsWindow::page(int index) const
 {
-    return m_pages->widget(index);
+    return static_cast<QScrollArea *>(m_pages->widget(index))->widget();
 }
 
 } // namespace wp
