@@ -88,11 +88,12 @@ All responses are minimal (e.g. `ok d3`). The document is never echoed back.
 |---|---|---|
 | `list_notes` | Notes in the notes folder and open notes | `n3 "Title" · 4 pages`, one line each |
 | `read_note(note, page?)` | Raw `.wprint` text of one or all pages | text |
-| `create_note(title, markdown?)` | New note in the notes folder | note id |
+| `create_note(title, markdown?, folder?)` | New note, optionally in a subfolder | note id |
 | `write(note, page, markdown, mode=append\|replace)` | Text edits | `ok` |
 | `draw(note, page, dsl, after?)` | Insert a drawing | `ok d3` + one line per compile error |
 | `edit_drawing(note, drawing, dsl)` / `delete_drawing(note, drawing)` | Modify a drawing | `ok` |
 | `add_page(note)` | New page | page number |
+| `create_flashcards(note?, page?, title, cards[])` | Flashcard deck in a note, or a new note | `ok n4 c1` |
 | `import_document(path)` | Extract a PDF/DOCX/DOC/PPTX for study | `ok i2 · 14 slides · 3 chunks` |
 
 Note ids are assigned per session; drawing ids are per note and never reused.
@@ -110,7 +111,8 @@ A drawing in which nothing compiles is refused, so a typo can't blank a drawing.
 
 **Prompts and resources**
 
-- MCP prompt `study_plan`: one-click instructions for building a study plan (shows up in Claude Desktop's prompt menu).
+- MCP prompt `study_plan`: one-click instructions for building a study plan, flashcards included (shows up in Claude Desktop's prompt menu).
+- MCP prompt `flashcards`: make a deck from a note or an import.
 - Resource `whiteprint://dsl`: the drawing grammar.
 
 **Setup:** Settings → "Connect to Claude" adds the helper to
