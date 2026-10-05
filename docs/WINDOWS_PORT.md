@@ -1,6 +1,6 @@
 # Windows port (C++ / Qt 6)
 
-Branch `windows-cpp`. Everything lives under `windows/`; the macOS sources (`Sources/`, `Tests/`,
+Work branch `windows-cpp`, merged into `main-windows`. Everything lives under `windows/`; the macOS sources (`Sources/`, `Tests/`,
 `Package.swift`, `Scripts/`, `Resources/`, the macOS workflows) are the reference and are not modified.
 
 ## Stack

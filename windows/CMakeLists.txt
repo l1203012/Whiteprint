@@ -78,3 +78,6 @@ if(app_tests)
         add_test(NAME app.${tn} COMMAND wp_test_app_${tn})
     endforeach()
 endif()
+
+# Install rules (used by installer/package.ps1; Qt runtime is added by windeployqt).
+install(TARGETS Whiteprint whiteprint-mcp RUNTIME DESTINATION .)

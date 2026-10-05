@@ -1,0 +1,45 @@
+# Builds and tests the Windows C++/Qt port (windows/).
+name: Windows CI
+
+on:
+  push:
+    branches: [main-windows, windows-cpp]
+    paths: ["windows/**", ".github/workflows/windows-ci.yml"]
+  pull_request:
+    branches: [main-windows, main-macos]
+    paths: ["windows/**", ".github/workflows/windows-ci.yml"]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: 6.8.3
+          host: windows
+          target: desktop
+          arch: win64_mingw
+          modules: qtpdf
+          tools: tools_mingw1310
+          cache: true
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          $mingw = (Get-ChildItem "$env:IQTA_TOOLS" -Directory -Filter "mingw*" | Select-Object -First 1).FullName
+          "$mingw\bin" | Out-File -Append -Encoding ascii $env:GITHUB_PATH
+          $env:PATH = "$mingw\bin;$env:PATH"
+          cmake -S windows -B build -G Ninja -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_C_COMPILER="$mingw\bin\gcc.exe" -DCMAKE_CXX_COMPILER="$mingw\bin\g++.exe"
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --test-dir build --output-on-failure
