@@ -2,12 +2,12 @@ import AppKit
 import WhiteprintBridge
 import WhiteprintStudy
 
-/// Settings: connecting Claude, the notes folder, and the study cache.
+/// Settings: the AI provider and connecting Claude, the notes folder, and the study cache.
 final class SettingsWindowController: NSWindowController {
     init() {
         let tabs = NSTabViewController()
         tabs.tabStyle = .toolbar
-        tabs.addTabViewItem(Self.tab(ClaudeSettingsViewController(), "Claude", "sparkles"))
+        tabs.addTabViewItem(Self.tab(AISettingsViewController(), "AI", "sparkles"))
         tabs.addTabViewItem(Self.tab(NotesSettingsViewController(), "Notes", "folder"))
         tabs.addTabViewItem(Self.tab(StudySettingsViewController(), "Study", "graduationcap"))
         let window = NSWindow(contentViewController: tabs)
@@ -127,9 +127,16 @@ private final class CopyButton: NSButton {
     }
 }
 
-// MARK: - Claude
+// MARK: - AI
 
-private final class ClaudeSettingsViewController: SettingsPane {
+private final class AISettingsViewController: SettingsPane {
+    private let settings = AISettings.shared
+    private let providerPopup = NSPopUpButton()
+    private let apiKeyField = NSSecureTextField()
+    private let modelField = NSTextField()
+    private var keyStatus: NSTextField!
+    private var testStatus: NSTextField!
+    private var testButton: NSButton!
     private var codeStatus: NSTextField!
     private var desktopStatus: NSTextField!
     private var command: NSTextField!
@@ -138,6 +145,9 @@ private final class ClaudeSettingsViewController: SettingsPane {
     private let helper = BridgePaths.helperExecutable
 
     override func build() {
+        buildProvider()
+        buildGrok()
+
         header("Claude Code")
         codeStatus = note("Looking for Claude Code…", secondary: false)
         note("Adds Whiteprint as an MCP server for your user, so every Claude Code session can read and write your notes. One-click study plans use your logged-in Claude Code.")
@@ -158,6 +168,102 @@ private final class ClaudeSettingsViewController: SettingsPane {
         DispatchQueue.global(qos: .userInitiated).async {
             let url = ClaudeCodeRunner.locateClaude()
             DispatchQueue.main.async { self.claudeFound(url) }
+        }
+    }
+
+    private func buildProvider() {
+        header("Study plans")
+        note("“Generate study plan” reads your imported material with:")
+        providerPopup.addItems(withTitles: AIProvider.allCases.map(\.title))
+        providerPopup.selectItem(at: AIProvider.allCases.firstIndex(of: settings.provider) ?? 0)
+        providerPopup.target = self
+        providerPopup.action = #selector(providerChanged(_:))
+        row(providerPopup)
+    }
+
+    private func buildGrok() {
+        header("Grok")
+        note("Uses xAI’s API with your own key, billed by xAI. The key is kept in your Keychain, never in preferences or logs.")
+        apiKeyField.placeholderString = "xai-…"
+        apiKeyField.widthAnchor.constraint(equalToConstant: 260).isActive = true
+        row(label("API key"), apiKeyField,
+            NSButton(title: "Save", target: self, action: #selector(saveKey(_:))),
+            NSButton(title: "Remove", target: self, action: #selector(removeKey(_:))))
+        keyStatus = note("")
+        modelField.stringValue = settings.grokModel
+        modelField.placeholderString = GrokRunner.Configuration.defaultModel
+        modelField.widthAnchor.constraint(equalToConstant: 260).isActive = true
+        modelField.target = self
+        modelField.action = #selector(modelChanged(_:))
+        testButton = NSButton(title: "Test Connection", target: self, action: #selector(testConnection(_:)))
+        row(label("Model"), modelField, testButton)
+        testStatus = note("")
+        updateKeyStatus()
+    }
+
+    private func label(_ text: String) -> NSTextField {
+        let label = NSTextField(labelWithString: text)
+        label.alignment = .right
+        label.widthAnchor.constraint(equalToConstant: 56).isActive = true
+        return label
+    }
+
+    private func updateKeyStatus() {
+        let saved = settings.apiKeyItem.read() != nil
+        keyStatus.stringValue = saved ? "✓ A key is saved in your Keychain." : "No key saved."
+        apiKeyField.placeholderString = saved ? "Saved — type a new key to replace it" : "xai-…"
+        testButton.isEnabled = saved
+    }
+
+    @objc private func providerChanged(_ sender: NSPopUpButton) {
+        settings.provider = AIProvider.allCases[max(0, sender.indexOfSelectedItem)]
+        NotificationCenter.default.post(name: .studySessionDidChange, object: nil)
+    }
+
+    @objc private func saveKey(_ sender: Any?) {
+        let key = apiKeyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return }
+        do {
+            try settings.apiKeyItem.save(key)
+            apiKeyField.stringValue = ""
+            testStatus.stringValue = ""
+        } catch {
+            inform("Couldn't save the key in the Keychain.", errorLine(error), style: .warning)
+        }
+        updateKeyStatus()
+        NotificationCenter.default.post(name: .studySessionDidChange, object: nil)
+    }
+
+    @objc private func removeKey(_ sender: Any?) {
+        do {
+            try settings.apiKeyItem.delete()
+        } catch {
+            inform("Couldn't remove the key from the Keychain.", errorLine(error), style: .warning)
+        }
+        updateKeyStatus()
+        NotificationCenter.default.post(name: .studySessionDidChange, object: nil)
+    }
+
+    @objc private func modelChanged(_ sender: Any?) {
+        settings.grokModel = modelField.stringValue
+        modelField.stringValue = settings.grokModel
+    }
+
+    @objc private func testConnection(_ sender: Any?) {
+        modelChanged(nil)
+        if !apiKeyField.stringValue.trimmingCharacters(in: .whitespaces).isEmpty { saveKey(nil) }
+        guard let configuration = settings.grokConfiguration else { return }
+        testButton.isEnabled = false
+        testStatus.stringValue = "Testing \(configuration.model)…"
+        GrokRunner.testConnection(configuration) { [weak self] result in
+            guard let self else { return }
+            self.testButton.isEnabled = true
+            switch result {
+            case .success(let message):
+                self.testStatus.stringValue = "✓ " + (message.isEmpty ? "Connected." : message)
+            case .failure(let error):
+                self.testStatus.stringValue = "✗ " + errorLine(error)
+            }
         }
     }
 
