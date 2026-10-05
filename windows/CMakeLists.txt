@@ -51,13 +51,14 @@ endfunction()
 
 wp_module(core)
 wp_module(extract QT Gui Pdf DEPS core)
-wp_module(render QT Gui Widgets PrintSupport DEPS core)
+wp_module(render QT Gui Widgets PrintSupport Pdf DEPS core)
 wp_module(bridge QT Network DEPS core)
 wp_module(study QT Network DEPS core extract)
 wp_module(editor QT Gui Widgets DEPS core render)
 
 add_executable(whiteprint-mcp mcp/main.cpp)
 target_link_libraries(whiteprint-mcp PRIVATE wp_core wp_bridge)
+target_compile_definitions(whiteprint-mcp PRIVATE WP_VERSION="${WP_VERSION}")
 
 file(GLOB app_srcs CONFIGURE_DEPENDS app/*.cpp app/*.h)
 add_executable(Whiteprint WIN32 ${app_srcs} app/Whiteprint.rc app/resources.qrc)
