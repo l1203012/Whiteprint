@@ -30,5 +30,6 @@ let package = Package(
         .testTarget(name: "WhiteprintStudyTests", dependencies: ["WhiteprintStudy"]),
         .testTarget(name: "WhiteprintExtractTests", dependencies: ["WhiteprintExtract"]),
         .testTarget(name: "WhiteprintRenderTests", dependencies: ["WhiteprintRender", "WhiteprintCore"]),
+        .testTarget(name: "WhiteprintAppTests", dependencies: ["WhiteprintApp"]),
     ]
 )

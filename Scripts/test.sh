@@ -7,6 +7,8 @@
 # With Xcode installed this is `swift test`. With only the Command Line Tools
 # (no XCTest), each suite is compiled into the module it tests together with
 # a minimal XCTest stand-in (Scripts/xctest-shim) and run as an executable.
+# A file declaring `@main` is left out, since the generated runner has its
+# own top-level code.
 # The stand-in supports XCTestCase with setUp/tearDown, sync/async/throwing
 # test methods and the common XCTAssert functions, not expectations.
 set -euo pipefail
@@ -72,7 +74,8 @@ EOF
     swiftc -module-name "$target" -Onone -suppress-warnings \
         -target "$ARCH-apple-macos13.0" -I "$OUT" -L "$OUT" $links \
         -o "$dir/run" \
-        $(find "Sources/$target" -name '*.swift') "$dir"/*.swift Scripts/xctest-shim/XCTestShim.swift \
+        $(find "Sources/$target" -name '*.swift' -exec grep -L '^@main' {} +) \
+        "$dir"/*.swift Scripts/xctest-shim/XCTestShim.swift \
         || { status=1; continue; }
     "$dir/run" || status=1
 done
