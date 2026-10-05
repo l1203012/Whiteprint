@@ -3,16 +3,22 @@ import WhiteprintCore
 
 public enum StudyPlanRenderer {
     /// The study plan as a Whiteprint note: overview, learning path with ★/○/✕
-    /// tiers and refs, a `- [ ]` to-do checklist, and diagrams as drawings.
+    /// tiers and refs, a `- [ ]` to-do checklist, a flashcard deck, and
+    /// diagrams as drawings.
     ///
-    /// Page 1 holds the overview and learning path, page 2 the to-do list and
-    /// page 3 the diagrams; pages with nothing to show are left out.
+    /// Page 1 holds the overview and learning path, then come pages for the
+    /// to-do list, the flashcards and the diagrams; pages with nothing to show
+    /// are left out.
     public static func note(for plan: StudyPlan) -> Note {
         let title = oneLine(plan.title).isEmpty ? "Study plan" : oneLine(plan.title)
         // One text block per page: adjacent text blocks would merge when the note is read back.
         var pages = [NotePage(blocks: [.text(overview(plan, title: title) + "\n\n" + learningPath(plan.modules))])]
         if !plan.tasks.isEmpty {
             pages.append(NotePage(blocks: [.text(toDo(plan.tasks))]))
+        }
+        let cards = plan.flashcards.filter { !oneLine($0.question).isEmpty || !oneLine($0.answer).isEmpty }
+        if !cards.isEmpty {
+            pages.append(NotePage(blocks: [.text("## Flashcards"), .cards(CardDeck(title: title, cards: cards))]))
         }
         let diagrams = plan.diagrams
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }

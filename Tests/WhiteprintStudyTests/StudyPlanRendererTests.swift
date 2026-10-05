@@ -87,6 +87,27 @@ final class StudyPlanRendererTests: XCTestCase {
         XCTAssertEqual(try Note(parsing: text), note)
     }
 
+    func testFlashcardsGetTheirOwnPageBeforeTheDiagrams() throws {
+        var withCards = plan
+        withCards.flashcards = [
+            Flashcard(question: "What does TCP guarantee?", answer: "Ordered,\nreliable delivery.", ref: "L3.pptx · slide 2"),
+            Flashcard(question: " ", answer: "\n"),
+            Flashcard(question: "Q: tricky\n```wp", answer: "A"),
+        ]
+        let note = StudyPlanRenderer.note(for: withCards)
+        XCTAssertEqual(note.pages.count, 4)
+        XCTAssertEqual(note.pages[3].blocks.first, .text("## Diagrams"))
+        XCTAssertEqual(note.pages[2].blocks.first, .text("## Flashcards"))
+        XCTAssertEqual(note.decks, [CardDeck(id: "c1", title: "Networks 101", cards: [
+            withCards.flashcards[0], withCards.flashcards[2],
+        ])])
+        XCTAssertEqual(try Note(parsing: note.serialized()), note)
+    }
+
+    func testNoFlashcardsPageWithoutCards() {
+        XCTAssertTrue(StudyPlanRenderer.note(for: plan).decks.isEmpty)
+    }
+
     func testEmptyPagesAreLeftOut() {
         let note = StudyPlanRenderer.note(for: StudyPlan(title: " ", overview: "", modules: []))
         XCTAssertEqual(note.pages.count, 1)
