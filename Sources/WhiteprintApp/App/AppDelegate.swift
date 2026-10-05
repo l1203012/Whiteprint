@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        ScreenshotMode.startIfRequested()
         let services = AppServices.shared
         let server = BridgeServer(handler: services.bridge)
         do {
