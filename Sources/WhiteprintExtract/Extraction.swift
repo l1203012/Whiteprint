@@ -1,7 +1,5 @@
 import Foundation
 
-// CONTRACT (owner: extract agent). Public signatures are fixed; bodies are stubs.
-
 /// One page, slide or section of a source document.
 public struct ExtractedUnit: Codable, Equatable {
     /// Human-readable location, e.g. `p. 6`, `slide 14`, `section 3`.
@@ -66,7 +64,21 @@ public enum DocumentExtractor {
     /// while for large or scanned files, so call it off the main thread.
     /// Memory stays flat: one page or slide is processed at a time.
     public static func extract(_ url: URL, ocr: Bool = true) throws -> ExtractedDocument {
-        throw ExtractionError.unsupportedType(url.lastPathComponent)
+        let name = url.lastPathComponent
+        let type = url.pathExtension.lowercased()
+        guard supportedExtensions.contains(type) else { throw ExtractionError.unsupportedType(name) }
+        guard FileManager.default.isReadableFile(atPath: url.path) else { throw ExtractionError.unreadable(name) }
+
+        let raw: [ExtractedUnit]
+        switch type {
+        case "pdf": raw = try PDFExtractor.extract(url, ocr: ocr)
+        case "docx": raw = try RichTextExtractor.extract(url, type: .officeOpenXML)
+        case "doc": raw = try RichTextExtractor.extract(url, type: .docFormat)
+        default: raw = try PresentationExtractor.extract(url)
+        }
+        let units = TextCleaner.clean(raw)
+        guard !units.isEmpty else { throw ExtractionError.empty(name) }
+        return ExtractedDocument(name: name, units: units)
     }
 }
 
@@ -77,6 +89,6 @@ public enum Chunker {
     /// Splits at unit boundaries; a single oversized unit is split at paragraph
     /// or line boundaries.
     public static func chunks(_ document: ExtractedDocument, maxCharacters: Int = defaultMaxCharacters) -> [ExtractedChunk] {
-        []
+        makeChunks(document, maxCharacters: maxCharacters)
     }
 }
