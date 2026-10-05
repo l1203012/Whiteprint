@@ -1,6 +1,7 @@
 # Builds the install DMG and attaches it to a draft GitHub Release.
-# Runs for pushed v* tags, or by hand from the Actions tab. Signing and
-# notarization happen only when their secrets are set; see docs/RELEASING.md.
+# Runs for pushed vMAJOR.MINOR.PATCH[-pre] tags, or by hand from the Actions tab.
+# Signing and notarization happen only when their secrets are set; see
+# docs/RELEASING.md.
 name: Release
 
 on:
@@ -9,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version, e.g. 0.1.0-beta.2 (default: the tag, or Info.plist)"
+        description: "Version without the v, e.g. 0.1.0-beta.2 (default: the tag, or Info.plist)"
         required: false
         type: string
       plain_dmg:
@@ -21,18 +22,21 @@ on:
 permissions:
   contents: write
 
+# One run per tag at a time; a second run for the same tag waits, then
+# replaces the first one's files instead of creating another release.
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.version && format('v{0}', inputs.version) || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
   release:
+    name: release
     runs-on: macos-14
     timeout-minutes: 60
     env:
       DMG_PLAIN: ${{ inputs.plain_dmg && '1' || vars.DMG_PLAIN || '0' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # build.sh numbers builds by commit count.
           fetch-depth: 0
@@ -45,11 +49,27 @@ jobs:
             version=$INPUT_VERSION
           elif [ "$GITHUB_REF_TYPE" = tag ]; then
             version=$GITHUB_REF_NAME
+            if ! [[ $version =~ ^v ]]; then
+              echo "::error::Release tags start with v, like v1.2.0 or v1.2.0-beta.1; got $version"
+              exit 1
+            fi
           else
             version=$(plutil -extract CFBundleShortVersionString raw Resources/Info.plist)
           fi
           version=${version#v}
-          echo "VERSION=$version" >> "$GITHUB_ENV"
+          if ! [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
+            echo "::error::'$version' is not MAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH-prerelease, e.g. 1.2.0 or 1.2.0-beta.1"
+            exit 1
+          fi
+          plist=$(plutil -extract CFBundleShortVersionString raw Resources/Info.plist)
+          if [ "$plist" != "$version" ]; then
+            echo "::warning::Resources/Info.plist says $plist; the release is built as $version"
+          fi
+          {
+            echo "VERSION=$version"
+            echo "TAG=v$version"
+            echo "DMG=Whiteprint-$version.dmg"
+          } >> "$GITHUB_ENV"
           echo "Whiteprint $version"
           swift --version
 
@@ -81,6 +101,8 @@ jobs:
             -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           rm "$RUNNER_TEMP/certificate.p12"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" >/dev/null
+          # Our keychain first, then the existing ones (quoted paths, split on whitespace).
+          # shellcheck disable=SC2046
           security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
           identity=$(security find-identity -v -p codesigning "$keychain" \
             | awk -F '"' '/Developer ID Application/ { print $2; exit }')
@@ -113,27 +135,74 @@ jobs:
       - name: Build DMG
         run: Scripts/release.sh "$VERSION"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: Whiteprint-${{ env.VERSION }}
           path: |
-            .build/release/Whiteprint-${{ env.VERSION }}.dmg
-            .build/release/Whiteprint-${{ env.VERSION }}.dmg.sha256
+            .build/release/${{ env.DMG }}
+            .build/release/${{ env.DMG }}.sha256
+          if-no-files-found: error
+          compression-level: 0
 
+      - name: Release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTARIZED: ${{ steps.secrets.outputs.sign == 'true' && steps.secrets.outputs.notarize == 'true' }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+            -f tag_name="$TAG" -f target_commitish="$GITHUB_SHA" --jq .body > "$RUNNER_TEMP/generated.md"
+          sha=$(cut -d' ' -f1 < ".build/release/$DMG.sha256")
+          python3 - "$RUNNER_TEMP/generated.md" .github/release-notes.md "$sha" > "$RUNNER_TEMP/notes.md" <<'EOF'
+          import os, re, sys
+          generated, template, sha = open(sys.argv[1]).read().strip(), open(sys.argv[2]).read(), sys.argv[3]
+          template = re.sub(r"\A\s*<!--.*?-->\s*", "", template, flags=re.S)
+          if os.environ["NOTARIZED"] == "true":
+              template = re.sub(r"<!-- unsigned -->.*?<!-- /unsigned -->\n?", "", template, flags=re.S)
+          else:
+              template = re.sub(r"<!-- /?unsigned -->\n?", "", template)
+          values = {"VERSION": os.environ["VERSION"], "TAG": os.environ["TAG"], "DMG": os.environ["DMG"],
+                    "SHA256": sha, "REPOSITORY": os.environ["GITHUB_REPOSITORY"]}
+          template = re.sub(r"\{\{(\w+)\}\}", lambda m: values[m.group(1)], template)
+          print(generated + "\n\n" + template.strip())
+          EOF
+          cat "$RUNNER_TEMP/notes.md"
+
+      # Creates a draft release, or, if one exists for the tag (a re-run, or a
+      # second run for the same tag push), replaces its files. A draft also gets
+      # fresh notes; a published release keeps the notes it was published with.
       - name: Draft GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          tag="v$VERSION"
-          files=(".build/release/Whiteprint-$VERSION.dmg" ".build/release/Whiteprint-$VERSION.dmg.sha256")
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" "${files[@]}" --clobber
-          else
-            prerelease=()
-            case "$VERSION" in *-*) prerelease=(--prerelease) ;; esac
-            gh release create "$tag" "${files[@]}" --draft --generate-notes \
-              --title "Whiteprint $VERSION" --target "$GITHUB_SHA" "${prerelease[@]}"
+          files=(".build/release/$DMG" ".build/release/$DMG.sha256")
+          prerelease=false
+          case "$VERSION" in *-*) prerelease=true ;; esac
+          notes="$RUNNER_TEMP/notes.md"
+
+          update() {
+            gh release upload "$TAG" "${files[@]}" --clobber
+            if [ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = true ]; then
+              gh release edit "$TAG" --notes-file "$notes" --prerelease="$prerelease"
+              echo "Updated the files and notes of the draft release $TAG"
+            else
+              echo "::notice::$TAG is already published; replaced its files and kept its notes"
+            fi
+          }
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            update
+          elif ! gh release create "$TAG" "${files[@]}" --draft --title "Whiteprint $VERSION" \
+              --notes-file "$notes" --target "$GITHUB_SHA" --prerelease="$prerelease"; then
+            # Another run may have created it in the meantime.
+            gh release view "$TAG" >/dev/null
+            update
           fi
+          url=$(gh release view "$TAG" --json url --jq .url)
+          {
+            echo "### Whiteprint $VERSION"
+            echo
+            echo "Release: $url (pre-release: $prerelease). If it is a draft, review the notes and publish it."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Remove signing keychain and key
         if: always()
