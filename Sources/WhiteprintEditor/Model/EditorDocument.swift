@@ -17,6 +17,7 @@ struct EditorBlock: Equatable {
     enum Content: Equatable {
         case text(String)
         case drawing(Drawing)
+        case cards(CardDeck)
     }
 
     var id: BlockID
@@ -73,6 +74,8 @@ struct EditorDocument: Equatable {
                     return canonical.isEmpty ? nil : .text(canonical)
                 case .drawing(let drawing):
                     return .drawing(drawing)
+                case .cards(let deck):
+                    return .cards(deck)
                 }
             })
         }
@@ -209,6 +212,9 @@ struct EditorDocument: Equatable {
         switch self[at].content {
         case .text(let text): copy = EditorBlock(id: makeID(), content: .text(text))
         case .drawing(let drawing): copy = makeDrawingBlock(source: drawing.source)
+        case .cards(var deck):
+            deck.id = newDeckID()
+            copy = EditorBlock(id: makeID(), content: .cards(deck))
         }
         pages[at.page].blocks.insert(copy, at: at.block + 1)
         normalize(page: at.page)
@@ -285,6 +291,7 @@ struct EditorDocument: Equatable {
         for page in pages {
             for block in page.blocks {
                 if let drawing = block.drawing { drawingIDs[drawing.id] = block.id }
+                if case .cards(let deck) = block.content { drawingIDs[deck.id] = block.id }
             }
         }
         var used = Set<BlockID>()
@@ -300,6 +307,8 @@ struct EditorDocument: Equatable {
                 switch block.content {
                 case .drawing(let drawing):
                     match = drawingIDs[drawing.id].map { EditorBlock(id: $0, content: block.content) }
+                case .cards(let deck):
+                    match = drawingIDs[deck.id].map { EditorBlock(id: $0, content: block.content) }
                 case .text(let text):
                     if textIndex < oldText.count {
                         match = oldText[textIndex]
@@ -383,11 +392,20 @@ struct EditorDocument: Equatable {
         switch block {
         case .text(let text): return EditorBlock(id: makeID(), content: .text(text))
         case .drawing(let drawing): return EditorBlock(id: makeID(), content: .drawing(drawing))
+        case .cards(let deck): return EditorBlock(id: makeID(), content: .cards(deck))
         }
     }
 
     private mutating func makeDrawingBlock(source: String) -> EditorBlock {
         EditorBlock(id: makeID(), content: .drawing(Drawing(id: newDrawingID(), source: source)))
+    }
+
+    /// A deck id that's unused and recorded as used, via `Note`'s own bookkeeping.
+    private mutating func newDeckID() -> String {
+        var scratch = note
+        let id = (try? scratch.insertDeck(CardDeck(cards: []), page: 1)) ?? scratch.nextDeckID()
+        base.frontMatter = scratch.frontMatter
+        return id
     }
 
     /// A drawing id that's unused and recorded as used, via `Note`'s own bookkeeping.

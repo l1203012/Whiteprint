@@ -189,13 +189,5 @@ private final class PreviewSwatch: NSView {
         let path = NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6)
         palette.pageBackground.setFill()
         path.fill()
-        guard RenderStubFallback.isActive, let drawing = subviews.first, canvasSize.width > 0 else { return }
-        NSGraphicsContext.saveGraphicsState()
-        let transform = NSAffineTransform()
-        transform.translateX(by: drawing.frame.minX, yBy: drawing.frame.minY)
-        transform.scale(by: drawing.frame.width / canvasSize.width)
-        transform.concat()
-        RenderStubFallback.draw(DrawingCompiler.compile(source).scene, palette: palette)
-        NSGraphicsContext.restoreGraphicsState()
     }
 }

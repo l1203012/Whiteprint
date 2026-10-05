@@ -14,6 +14,7 @@ final class EditorDocumentTests: XCTestCase {
                 switch block.content {
                 case .text(let text): return "t:\(text)"
                 case .drawing(let drawing): return "d:\(drawing.id):\(drawing.source)"
+                case .cards(let deck): return "c:\(deck.id):\(deck.cards.count)"
                 }
             }
         }

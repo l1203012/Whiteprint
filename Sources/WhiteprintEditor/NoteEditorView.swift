@@ -200,6 +200,8 @@ public final class NoteEditorView: NSView {
             case .text(let text): return HeightEstimate.text(text, width: width)
             case .drawing(let drawing):
                 return DrawingBlockView.height(for: DrawingBlockView.canvasSize(for: drawing.source), width: width)
+            case .cards(let deck):
+                return HeightEstimate.text(DeckPlaceholderView.text(for: deck), width: width)
             }
         }
         return blocks.reduce(0, +) + CGFloat(max(0, blocks.count - 1)) * PageGeometry.blockSpacing
@@ -295,6 +297,9 @@ public final class NoteEditorView: NSView {
             view.needsLayout = true
             view.needsDisplay = true
             return view
+        case .cards(let deck):
+            // TEMPORARY until the deck block view lands: a read-only summary.
+            return DeckPlaceholderView(deck: deck, palette: palette)
         }
     }
 

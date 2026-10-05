@@ -56,6 +56,7 @@ public enum PageThumbnail {
             switch block {
             case .text(let text): layout.addText(text)
             case .drawing(let drawing): layout.addDrawing(drawing.source)
+            case .cards(let deck): layout.addText("🗂 " + (deck.title ?? "Flashcards") + " · \(deck.cards.count) cards")
             }
         }
         context.restoreGState()

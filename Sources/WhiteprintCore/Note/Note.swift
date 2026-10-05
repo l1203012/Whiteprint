@@ -1,7 +1,7 @@
 /// A Whiteprint note: the in-memory form of a `.wprint` file.
 ///
-/// A note is a list of pages. Each page is a list of blocks, where a block is
-/// either Markdown text or a drawing written in the Whiteprint drawing language.
+/// A note is a list of pages. Each page is a list of blocks: Markdown text,
+/// drawings written in the Whiteprint drawing language, or flashcard decks.
 public struct Note: Equatable {
     /// The newest `.wprint` format version this build can read and write.
     public static let formatVersion = 1
@@ -18,11 +18,11 @@ public struct Note: Equatable {
         self.init(frontMatter: frontMatter, pages: pages)
     }
 
-    /// Drawings with a missing, invalid or duplicate id get a fresh one.
+    /// Drawings and decks with a missing, invalid or duplicate id get a fresh one.
     init(frontMatter: FrontMatter, pages: [NotePage]) {
         self.frontMatter = frontMatter
         self.pages = pages.isEmpty ? [NotePage()] : pages
-        normalizeDrawingIDs()
+        normalizeBlockIDs()
     }
 
     /// Every drawing in the note, in reading order.
@@ -35,53 +35,97 @@ public struct Note: Equatable {
         }
     }
 
+    /// Every flashcard deck in the note, in reading order.
+    public var decks: [CardDeck] {
+        pages.flatMap { page in
+            page.blocks.compactMap { block -> CardDeck? in
+                if case .cards(let deck) = block { return deck }
+                return nil
+            }
+        }
+    }
+
     /// An unused drawing id (`d1`, `d2`, …). Ids are never reused within a note,
     /// even after a drawing is deleted, so a stale id held by Claude can't point
     /// at a different drawing. The high-water mark is kept in the front matter.
     public func nextDrawingID() -> String {
-        "d\(highestDrawingNumber + 1)"
+        nextID(.drawing)
     }
 
-    private var highestDrawingNumber: Int {
-        max(Self.highestDrawingNumber(in: drawings.map(\.id)), frontMatter.lastDrawingNumber)
+    /// An unused deck id (`c1`, `c2`, …), never reused like drawing ids.
+    public func nextDeckID() -> String {
+        nextID(.cards)
     }
 
-    /// Records `id` as used so `nextDrawingID` never returns it again.
-    mutating func reserveDrawingID(_ id: String) {
-        let number = Self.highestDrawingNumber(in: [id])
-        if number > frontMatter.lastDrawingNumber {
-            frontMatter.lastDrawingNumber = number
+    func nextID(_ kind: BlockIDKind) -> String {
+        "\(kind.prefix)\(highestNumber(kind) + 1)"
+    }
+
+    private func highestNumber(_ kind: BlockIDKind) -> Int {
+        max(kind.highestNumber(in: ids(of: kind)), frontMatter.lastNumber(kind))
+    }
+
+    private func ids(of kind: BlockIDKind) -> [String] {
+        pages.flatMap { $0.blocks.compactMap { $0.idKind == kind ? $0.id : nil } }
+    }
+
+    /// Records `id` as used so it's never handed out again.
+    mutating func reserveID(_ id: String) {
+        guard let kind = BlockIDKind(id: id) else { return }
+        let number = kind.highestNumber(in: [id])
+        if number > frontMatter.lastNumber(kind) {
+            frontMatter.setLastNumber(number, kind)
         }
     }
 
-    /// Gives every drawing a valid, unique id, keeping existing ones where possible.
-    mutating func normalizeDrawingIDs() {
-        var used = Set<String>()
-        var missing: [(page: Int, block: Int)] = []
-        for p in pages.indices {
-            for b in pages[p].blocks.indices {
-                guard case .drawing(let drawing) = pages[p].blocks[b] else { continue }
-                if Drawing.isValidID(drawing.id) && !used.contains(drawing.id) {
-                    used.insert(drawing.id)
-                } else {
-                    missing.append((p, b))
+    /// Gives every drawing and deck a valid, unique id, keeping existing ones where possible.
+    mutating func normalizeBlockIDs() {
+        for kind in BlockIDKind.allCases {
+            var used = Set<String>()
+            var missing: [(page: Int, block: Int)] = []
+            for p in pages.indices {
+                for b in pages[p].blocks.indices where pages[p].blocks[b].idKind == kind {
+                    let id = pages[p].blocks[b].id ?? ""
+                    if Drawing.isValidID(id) && !used.contains(id) {
+                        used.insert(id)
+                    } else {
+                        missing.append((p, b))
+                    }
                 }
             }
+            var next = max(kind.highestNumber(in: used), frontMatter.lastNumber(kind)) + 1
+            for (p, b) in missing {
+                pages[p].blocks[b] = pages[p].blocks[b].withID("\(kind.prefix)\(next)")
+                next += 1
+            }
+            for id in ids(of: kind) {
+                reserveID(id)
+            }
         }
-        var next = max(Self.highestDrawingNumber(in: used), frontMatter.lastDrawingNumber) + 1
-        for (p, b) in missing {
-            guard case .drawing(var drawing) = pages[p].blocks[b] else { continue }
-            drawing.id = "d\(next)"
-            next += 1
-            pages[p].blocks[b] = .drawing(drawing)
-        }
-        for id in drawings.map(\.id) {
-            reserveDrawingID(id)
+    }
+}
+
+/// Blocks that carry a stable id: drawings (`d1`) and flashcard decks (`c1`).
+enum BlockIDKind: CaseIterable {
+    case drawing, cards
+
+    init?(id: String) {
+        switch id.first {
+        case "d": self = .drawing
+        case "c": self = .cards
+        default: return nil
         }
     }
 
-    private static func highestDrawingNumber<S: Sequence>(in ids: S) -> Int where S.Element == String {
-        ids.compactMap { id in id.hasPrefix("d") ? Int(id.dropFirst()) : nil }.max() ?? 0
+    var prefix: String {
+        switch self {
+        case .drawing: return "d"
+        case .cards: return "c"
+        }
+    }
+
+    func highestNumber<S: Sequence>(in ids: S) -> Int where S.Element == String {
+        ids.compactMap { id in id.hasPrefix(prefix) ? Int(id.dropFirst()) : nil }.max() ?? 0
     }
 }
 
@@ -94,9 +138,40 @@ public struct NotePage: Equatable {
 }
 
 public enum NoteBlock: Equatable {
-    /// Markdown text. Never contains a top-level ```` ```wp ```` fence or a `+++page` line.
+    /// Markdown text. Never contains a top-level ```` ```wp ```` or ```` ```cards ````
+    /// fence or a `+++page` line.
     case text(String)
     case drawing(Drawing)
+    case cards(CardDeck)
+
+    /// The block's stable id; nil for text.
+    public var id: String? {
+        switch self {
+        case .text: return nil
+        case .drawing(let drawing): return drawing.id
+        case .cards(let deck): return deck.id
+        }
+    }
+
+    var idKind: BlockIDKind? {
+        switch self {
+        case .text: return nil
+        case .drawing: return .drawing
+        case .cards: return .cards
+        }
+    }
+
+    func withID(_ id: String) -> NoteBlock {
+        switch self {
+        case .text: return self
+        case .drawing(var drawing):
+            drawing.id = id
+            return .drawing(drawing)
+        case .cards(var deck):
+            deck.id = id
+            return .cards(deck)
+        }
+    }
 }
 
 public struct Drawing: Equatable {
@@ -168,11 +243,20 @@ public struct FrontMatter: Equatable {
         self[Self.versionKey].flatMap { Int($0) }
     }
 
-    static let lastDrawingKey = "last-drawing"
+    /// Highest id number ever handed out in this note for that kind of block,
+    /// stored as `last-drawing` / `last-cards`.
+    func lastNumber(_ kind: BlockIDKind) -> Int {
+        self[Self.lastNumberKey(kind)].flatMap { Int($0) } ?? 0
+    }
 
-    /// Highest `dN` drawing number ever handed out in this note.
-    var lastDrawingNumber: Int {
-        get { self[Self.lastDrawingKey].flatMap { Int($0) } ?? 0 }
-        set { self[Self.lastDrawingKey] = newValue > 0 ? String(newValue) : nil }
+    mutating func setLastNumber(_ number: Int, _ kind: BlockIDKind) {
+        self[Self.lastNumberKey(kind)] = number > 0 ? String(number) : nil
+    }
+
+    private static func lastNumberKey(_ kind: BlockIDKind) -> String {
+        switch kind {
+        case .drawing: return "last-drawing"
+        case .cards: return "last-cards"
+        }
     }
 }

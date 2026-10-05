@@ -81,9 +81,6 @@ final class BlockTextView: NSTextView, NSTextStorageDelegate {
         guard editedMask.contains(.editedCharacters) else { return }
         let whole = editedRange.length == textStorage.length
         MarkdownStyler.apply(to: textStorage, in: whole ? nil : editedRange, palette: palette)
-        if RenderStubFallback.isActive {
-            RenderStubFallback.style(textStorage, palette: palette)
-        }
     }
 
     // MARK: Geometry

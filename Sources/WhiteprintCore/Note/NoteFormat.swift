@@ -12,6 +12,8 @@ public enum NoteFormatError: Error, Equatable {
 extension Note {
     static let pageSeparator = "+++page"
     static let drawingFenceInfo = "wp"
+    static let cardsFenceInfo = "cards"
+    static let blockFenceInfos: Set<Substring> = [Substring(drawingFenceInfo), Substring(cardsFenceInfo)]
 
     /// Parses `.wprint` text. Parsing is lenient: anything that isn't front matter,
     /// a page separator or a drawing is kept as Markdown, and an unterminated
@@ -81,19 +83,20 @@ private struct BodyParser {
     private var blocks: [NoteBlock] = []
     private var text: [Substring] = []
     private var fence: MarkdownFence?
-    private var drawing: (id: String, lines: [Substring])?
+    /// An open ```` ```wp ```` or ```` ```cards ```` block.
+    private var special: (info: Substring, id: String, lines: [Substring])?
 
     mutating func consume(_ line: Substring) {
         if let open = fence {
             if open.isClosed(by: line) {
                 fence = nil
-                if drawing != nil {
-                    finishDrawing()
+                if special != nil {
+                    finishSpecialBlock()
                     return
                 }
             }
-            if drawing != nil {
-                drawing!.lines.append(line)
+            if special != nil {
+                special!.lines.append(line)
             } else {
                 text.append(line)
             }
@@ -107,10 +110,10 @@ private struct BodyParser {
 
         if let open = MarkdownFence.opening(line) {
             fence = open
-            if open.infoWords.first == Substring(Note.drawingFenceInfo) {
+            if let info = open.infoWords.first, Note.blockFenceInfos.contains(info) {
                 flushText()
-                // A missing id is filled in by `normalizeDrawingIDs`.
-                drawing = (open.attribute("id") ?? "", [])
+                // A missing id is filled in by `normalizeBlockIDs`.
+                special = (info, open.attribute("id") ?? "", [])
                 return
             }
         }
@@ -118,17 +121,22 @@ private struct BodyParser {
     }
 
     mutating func finish() -> [NotePage] {
-        if drawing != nil {
-            finishDrawing()
+        if special != nil {
+            finishSpecialBlock()
         }
         finishPage()
         return pages
     }
 
-    private mutating func finishDrawing() {
-        guard let drawing else { return }
-        blocks.append(.drawing(Drawing(id: drawing.id, source: drawing.lines.joined(separator: "\n"))))
-        self.drawing = nil
+    private mutating func finishSpecialBlock() {
+        guard let special else { return }
+        let source = special.lines.joined(separator: "\n")
+        if special.info == Substring(Note.cardsFenceInfo) {
+            blocks.append(.cards(CardDeck(id: special.id, parsing: source)))
+        } else {
+            blocks.append(.drawing(Drawing(id: special.id, source: source)))
+        }
+        self.special = nil
     }
 
     private mutating func finishPage() {
@@ -173,14 +181,49 @@ extension Note {
     private static func serialize(_ block: NoteBlock) -> String {
         switch block {
         case .text(let text):
+            let text = escapingStructure(in: text)
             // Close a fence the text left open, so it can't swallow the blocks after it.
             guard let open = MarkdownFence.unclosed(in: text) else { return text }
             return text + "\n" + String(repeating: open.marker, count: open.length)
         case .drawing(let drawing):
-            let fence = String(repeating: "`", count: fenceLength(for: drawing.source))
-            let content = drawing.source.isEmpty ? "" : drawing.source + "\n"
-            return "\(fence)\(drawingFenceInfo) id=\(drawing.id)\n\(content)\(fence)"
+            return fenced(drawing.source, info: drawingFenceInfo, id: drawing.id)
+        case .cards(let deck):
+            return fenced(deck.source, info: cardsFenceInfo, id: deck.id)
         }
+    }
+
+    private static func fenced(_ source: String, info: String, id: String) -> String {
+        let fence = String(repeating: "`", count: fenceLength(for: source))
+        let content = source.isEmpty ? "" : source + "\n"
+        return "\(fence)\(info) id=\(id)\n\(content)\(fence)"
+    }
+
+    /// Text typed by someone can contain a line that would read back as
+    /// structure: a `+++page` separator or a ```` ```wp ```` / ```` ```cards ````
+    /// opener outside a code block. Such lines get a leading `\`, which keeps
+    /// them literal in Markdown too.
+    private static func escapingStructure(in text: String) -> String {
+        var open: MarkdownFence?
+        var changed = false
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map { line -> Substring in
+            if let fence = open {
+                if fence.isClosed(by: line) { open = nil }
+                return line
+            }
+            if trimTrailing(line) == pageSeparator {
+                changed = true
+                return "\\" + line
+            }
+            if let fence = MarkdownFence.opening(line) {
+                if let info = fence.infoWords.first, blockFenceInfos.contains(info) {
+                    changed = true
+                    return "\\" + line
+                }
+                open = fence
+            }
+            return line
+        }
+        return changed ? lines.joined(separator: "\n") : text
     }
 
     /// One backtick longer than any backtick run that starts a line of the source.

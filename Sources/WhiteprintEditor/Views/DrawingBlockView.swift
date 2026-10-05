@@ -56,8 +56,7 @@ final class DrawingBlockView: NSView {
         guard !scene.shapes.isEmpty || !scene.lines.isEmpty || !scene.dimensions.isEmpty || !scene.groups.isEmpty else {
             return .zero
         }
-        let size = SceneRenderer.canvasSize(for: scene)
-        return size == .zero && RenderStubFallback.isActive ? RenderStubFallback.canvasSize(for: scene) : size
+        return SceneRenderer.canvasSize(for: scene)
     }
 
     /// Height for a column of `width`, scaling a too-wide drawing down.
@@ -104,14 +103,6 @@ final class DrawingBlockView: NSView {
             let size = text.size(withAttributes: attributes)
             text.draw(at: NSPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2),
                       withAttributes: attributes)
-        } else if RenderStubFallback.isActive, let context = NSGraphicsContext.current {
-            context.saveGraphicsState()
-            let transform = NSAffineTransform()
-            transform.translateX(by: drawingView.frame.minX, yBy: drawingView.frame.minY)
-            transform.scale(by: drawingView.frame.width / canvasSize.width)
-            transform.concat()
-            RenderStubFallback.draw(DrawingCompiler.compile(source).scene, palette: palette)
-            context.restoreGraphicsState()
         }
     }
 
