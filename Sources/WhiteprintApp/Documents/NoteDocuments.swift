@@ -39,6 +39,20 @@ enum NoteDocuments {
         return document
     }
 
+    /// Open documents whose file is `item` or inside it (when it's a folder).
+    static func documents(at item: URL) -> [NoteDocument] {
+        open.filter { $0.fileURL.map { NoteFiles.isInside($0, item) } ?? false }
+    }
+
+    /// Points open documents at their new location after `old` (a note or a
+    /// folder) moved to `new`. Usually the file coordinator already did.
+    static func relocate(from old: URL, to new: URL) {
+        for document in documents(at: old) {
+            guard let fileURL = document.fileURL, let moved = NoteFiles.relocated(fileURL, from: old, to: new) else { continue }
+            document.fileURL = moved
+        }
+    }
+
     /// Opens `url` the usual asynchronous way, reporting errors to the user.
     static func open(_ url: URL) {
         NSDocumentController.shared.openDocument(withContentsOf: url, display: true) { _, _, error in
@@ -74,8 +88,13 @@ final class DocumentWorkspace: NoteWorkspace {
         return try NoteDocuments.show(url).apply(actionName: actionName, change)
     }
 
-    func createNote(_ note: Note, title: String) throws -> URL {
-        let url = try library.folder.save(note, title: title)
+    func folderPath(of url: URL) -> String? {
+        library.folder.relativeFolder(of: url)
+    }
+
+    func createNote(_ note: Note, title: String, folder: String?) throws -> URL {
+        let directory = try folder.map(library.folder.folderURL(forPath:))
+        let url = try library.folder.save(note, title: title, in: directory)
         try NoteDocuments.show(url)
         library.reload()
         return url

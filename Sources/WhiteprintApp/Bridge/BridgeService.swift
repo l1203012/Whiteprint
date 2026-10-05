@@ -49,7 +49,8 @@ final class BridgeService: BridgeHandler {
                     return "\(id) \"\(NoteTitle.baseName(url))\" · unreadable"
                 }
                 let pages = note.pages.count
-                return "\(id) \"\(NoteTitle.display(for: note, fileURL: url))\" · \(pages) page\(pages == 1 ? "" : "s")"
+                let folder = workspace.folderPath(of: url).flatMap { $0.isEmpty ? nil : " · \($0)" } ?? ""
+                return "\(id) \"\(NoteTitle.display(for: note, fileURL: url))\"\(folder) · \(pages) page\(pages == 1 ? "" : "s")"
             }
             return lines.isEmpty ? "no notes" : lines.joined(separator: "\n")
 
@@ -63,12 +64,26 @@ final class BridgeService: BridgeHandler {
                 .map { "=== page \($0) ===\n\(try note.pageSource($0))" }
                 .joined(separator: "\n\n")
 
-        case let .createNote(title, markdown, _):
+        case let .createNote(title, markdown, folder):
             var note = Note(title: title)
             if let markdown, !markdown.isEmpty {
                 try note.write(markdown, page: 1, mode: .replace)
             }
-            return "ok \(registry.id(for: try workspace.createNote(note, title: title)))"
+            return "ok \(registry.id(for: try workspace.createNote(note, title: title, folder: folder)))"
+
+        case let .createFlashcards(id, page, title, cards):
+            guard !cards.isEmpty else { throw WorkspaceError.noCards }
+            let deck = CardDeck(title: title, cards: cards)
+            guard let id else {
+                var note = Note(title: "Flashcards – \(title)")
+                let deckID = try note.insertDeck(deck, page: 1)
+                let url = try workspace.createNote(note, title: "Flashcards – \(title)", folder: nil)
+                return "ok \(registry.id(for: url)) \(deckID)"
+            }
+            let deckID = try workspace.edit(noteAt: url(for: id), actionName: "Claude’s Flashcards") { note in
+                try note.insertDeck(deck, page: page ?? note.pages.count)
+            }
+            return "ok \(id.trimmingCharacters(in: .whitespaces).lowercased()) \(deckID)"
 
         case let .write(id, page, markdown, mode):
             try workspace.edit(noteAt: url(for: id), actionName: "Claude’s Edit") { note in
@@ -178,7 +193,7 @@ final class BridgeService: BridgeHandler {
         }
         reply(Self.respond {
             let note = StudyPlanRenderer.note(for: plan)
-            let url = try workspace.createNote(note, title: "Study plan – \(plan.title)")
+            let url = try workspace.createNote(note, title: "Study plan – \(plan.title)", folder: nil)
             return "ok \(registry.id(for: url))"
         })
     }

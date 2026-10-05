@@ -35,8 +35,13 @@ private final class MemoryWorkspace: NoteWorkspace {
         return result
     }
 
-    func createNote(_ note: Note, title: String) throws -> URL {
-        let url = folder.appendingPathComponent(title + ".wprint")
+    func folderPath(of url: URL) -> String? {
+        NotesFolder(url: folder).relativeFolder(of: url)
+    }
+
+    func createNote(_ note: Note, title: String, folder path: String?) throws -> URL {
+        let directory = try path.map(NotesFolder(url: folder).folderURL(forPath:)) ?? folder
+        let url = directory.appendingPathComponent(title + ".wprint")
         notes.append((url, note))
         return url
     }
@@ -172,6 +177,51 @@ final class BridgeServiceTests: XCTestCase {
         XCTAssertEqual(note.pages.count, 2)
     }
 
+    func testListNotesShowsFolders() async throws {
+        _ = try workspace.add("Top.wprint", "One")
+        _ = try workspace.add("Courses/Networks/TCP.wprint", "One\n+++page\nTwo")
+        let list = try await ok(.listNotes)
+        XCTAssertEqual(list, "n1 \"Top\" · 1 page\nn2 \"TCP\" · Courses/Networks · 2 pages")
+    }
+
+    func testCreateNoteInFolder() async throws {
+        let reply = try await ok(.createNote(title: "TCP", markdown: nil, folder: "Courses/Networks"))
+        XCTAssertEqual(reply, "ok n1")
+        let url = try XCTUnwrap(registry.url(for: "n1"))
+        XCTAssertEqual(workspace.folderPath(of: url), "Courses/Networks")
+        for bad in ["../Elsewhere", "/etc", "Courses/../../x", "~/Notes"] {
+            let refused = await send(.createNote(title: "X", markdown: nil, folder: bad))
+            guard case .failure(let message) = refused else { return XCTFail("\(bad) was accepted") }
+            XCTAssertTrue(message.contains("must be a path inside the notes folder"), message)
+        }
+    }
+
+    func testCreateFlashcardsMakesANewNote() async throws {
+        let cards = [Flashcard(question: "What does TCP guarantee?", answer: "Ordered delivery", ref: "Lecture3.pptx · slide 4")]
+        let reply = try await ok(.createFlashcards(note: nil, page: nil, title: "TCP", cards: cards))
+        XCTAssertEqual(reply, "ok n1 c1")
+        let url = try XCTUnwrap(registry.url(for: "n1"))
+        XCTAssertEqual(url.lastPathComponent, "Flashcards – TCP.wprint")
+        XCTAssertEqual(try workspace.note(at: url).decks, [CardDeck(id: "c1", title: "TCP", cards: cards)])
+    }
+
+    func testCreateFlashcardsAddsToTheLastPageByDefault() async throws {
+        let url = try workspace.add("A.wprint", "One\n+++page\nTwo")
+        let id = try await listedID("A")
+        let cards = [Flashcard(question: "Q", answer: "A")]
+        let first = try await ok(.createFlashcards(note: id, page: nil, title: "Deck", cards: cards))
+        XCTAssertEqual(first, "ok \(id) c1")
+        let second = try await ok(.createFlashcards(note: id, page: 1, title: "Other", cards: cards))
+        XCTAssertEqual(second, "ok \(id) c2")
+        let note = try workspace.note(at: url)
+        XCTAssertEqual(note.deck("c1")?.page, 2)
+        XCTAssertEqual(note.deck("c2")?.page, 1)
+        let empty = await send(.createFlashcards(note: id, page: nil, title: "Empty", cards: []))
+        XCTAssertEqual(empty, .failure("no cards given; each card needs a question and an answer"))
+        let badPage = await send(.createFlashcards(note: id, page: 7, title: "Deck", cards: cards))
+        XCTAssertEqual(badPage, .failure("page 7 doesn't exist (note has 2 pages)"))
+    }
+
     func testImportValidatesPathAndType() async throws {
         let missing = await send(.importDocument(path: "/nonexistent/Lecture.pdf"))
         XCTAssertEqual(missing, .failure("no file at /nonexistent/Lecture.pdf"))
@@ -205,5 +255,56 @@ final class BridgeServiceTests: XCTestCase {
     func testPing() async throws {
         let reply = try await ok(.ping)
         XCTAssertEqual(reply, "pong")
+    }
+}
+
+/// Records requests and answers them from a table.
+private final class FakeHandler: BridgeHandler {
+    var requests: [BridgeRequest] = []
+    var response = BridgeResponse.ok("ok")
+
+    func handle(_ request: BridgeRequest, reply: @escaping (BridgeResponse) -> Void) {
+        requests.append(request)
+        reply(response)
+    }
+}
+
+final class AgentToolBridgeTests: XCTestCase {
+    private func run(_ executor: GrokRunner.ToolExecutor, _ name: String, _ arguments: [String: Any]) async -> (String, Bool) {
+        await withCheckedContinuation { continuation in
+            executor(name, arguments) { text, isError in continuation.resume(returning: (text, isError)) }
+        }
+    }
+
+    func testMapsToolsOneToOne() {
+        let tools = [AgentTool(name: "list_notes", description: "List notes", inputSchema: ["type": "object"])]
+        let mapped = AgentToolBridge.runnerTools(tools)
+        XCTAssertEqual(mapped.map(\.name), ["list_notes"])
+        XCTAssertEqual(mapped.map(\.description), ["List notes"])
+        XCTAssertEqual(mapped.first?.inputSchema["type"] as? String, "object")
+    }
+
+    func testExecutorRunsRequestsThroughTheHandler() async {
+        let handler = FakeHandler()
+        let executor = AgentToolBridge.executor(handler: handler) { name, arguments in
+            guard name == "read_note", let note = arguments["note"] as? String else {
+                throw WorkspaceError.unknownNote(name)
+            }
+            return .readNote(note: note, page: nil)
+        }
+        let ok = await run(executor, "read_note", ["note": "n1"])
+        XCTAssertEqual(ok.0, "ok")
+        XCTAssertFalse(ok.1)
+        XCTAssertEqual(handler.requests, [.readNote(note: "n1", page: nil)])
+
+        handler.response = .failure("no note 'n1' (see list_notes)")
+        let failed = await run(executor, "read_note", ["note": "n1"])
+        XCTAssertEqual(failed.0, "no note 'n1' (see list_notes)")
+        XCTAssertTrue(failed.1)
+
+        let invalid = await run(executor, "bogus", [:])
+        XCTAssertEqual(invalid.0, "no note 'bogus' (see list_notes)")
+        XCTAssertTrue(invalid.1)
+        XCTAssertEqual(handler.requests.count, 2)
     }
 }

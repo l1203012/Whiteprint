@@ -1,4 +1,5 @@
 import AppKit
+import CoreServices
 import WhiteprintCore
 
 extension Notification.Name {
@@ -11,13 +12,19 @@ struct NoteEntry: Equatable {
     var url: URL
     var title: String
     var pageCount: Int
+    /// Relative to the notes folder (`Courses/Networks`), `""` at the top
+    /// level, nil for an open note saved elsewhere.
+    var folder: String?
+    var decks: [CardDeck] = []
 }
 
-/// The notes folder and the open documents, kept as one list that refreshes
-/// when files change on disk or a document's title changes.
+/// The notes folder tree and the open documents, kept as one list that
+/// refreshes when files change on disk or a document's title changes.
 final class NotesLibrary {
     private(set) var folder: NotesFolder
     private(set) var entries: [NoteEntry] = []
+    /// Every subfolder, relative to the notes folder, empty ones included.
+    private(set) var folders: [String] = []
     private var watcher: FolderWatcher?
     private var observers: [NSObjectProtocol] = []
 
@@ -42,7 +49,7 @@ final class NotesLibrary {
 
     /// Switches to another folder (from Settings) and remembers it.
     func changeFolder(to url: URL) {
-        UserDefaults.standard.set(url.path, forKey: NotesFolder.defaultsKey)
+        AppDefaults.store.set(url.path, forKey: NotesFolder.defaultsKey)
         folder = NotesFolder(url: url)
         startWatching()
         reload()
@@ -50,23 +57,35 @@ final class NotesLibrary {
 
     /// Notes-folder files, then open documents saved elsewhere.
     var urls: [URL] {
-        let inFolder = folder.noteURLs()
+        Self.merged(folder.noteURLs(), open: NoteDocuments.open.compactMap { $0.fileURL?.canonicalFile })
+    }
+
+    static func merged(_ inFolder: [URL], open: [URL]) -> [URL] {
         let known = Set(inFolder.map(\.path))
-        let elsewhere = NoteDocuments.open.compactMap { $0.fileURL?.canonicalFile }.filter { !known.contains($0.path) }
-        return inFolder + elsewhere
+        return inFolder + open.filter { !known.contains($0.path) }
+    }
+
+    func entry(for url: URL) -> NoteEntry? {
+        let url = url.canonicalFile
+        return entries.first { $0.url == url }
     }
 
     func reload() {
-        let fresh = urls.map { url -> NoteEntry in
+        let listing = folder.listing()
+        let all = Self.merged(listing.notes, open: NoteDocuments.open.compactMap { $0.fileURL?.canonicalFile })
+        let fresh = all.map { url -> NoteEntry in
             let note = NoteDocuments.document(for: url)?.note ?? (try? Self.read(url))
             return NoteEntry(
                 url: url,
                 title: note.map { NoteTitle.display(for: $0, fileURL: url) } ?? NoteTitle.baseName(url),
-                pageCount: note?.pages.count ?? 0
+                pageCount: note?.pages.count ?? 0,
+                folder: folder.relativeFolder(of: url),
+                decks: note?.decks ?? []
             )
         }
-        guard fresh != entries else { return }
+        guard fresh != entries || listing.folders != folders else { return }
         entries = fresh
+        folders = listing.folders
         NotificationCenter.default.post(name: .notesLibraryDidChange, object: self)
     }
 
@@ -74,7 +93,10 @@ final class NotesLibrary {
     private func update(_ document: NoteDocument) {
         guard let url = document.fileURL?.canonicalFile,
               let i = entries.firstIndex(where: { $0.url == url }) else { return reload() }
-        let entry = NoteEntry(url: url, title: document.title, pageCount: document.note.pages.count)
+        var entry = entries[i]
+        entry.title = document.title
+        entry.pageCount = document.note.pages.count
+        entry.decks = document.note.decks
         guard entries[i] != entry else { return }
         entries[i] = entry
         NotificationCenter.default.post(name: .notesLibraryDidChange, object: self)
@@ -93,33 +115,34 @@ final class NotesLibrary {
     }
 }
 
-/// Calls `onChange` on the main queue (coalesced) when files are added,
-/// removed, renamed or written in a folder.
+/// Calls `onChange` on the main queue (coalesced over a quarter second) when
+/// anything changes in a folder or any of its subfolders (FSEvents).
 final class FolderWatcher {
-    private let source: DispatchSourceFileSystemObject?
-    private var pending = false
+    private var stream: FSEventStreamRef?
+    private let onChange: () -> Void
 
     init(url: URL, onChange: @escaping () -> Void) {
-        let fd = open(url.path, O_EVTONLY)
-        guard fd >= 0 else {
-            source = nil
-            return
+        self.onChange = onChange
+        var context = FSEventStreamContext(
+            version: 0, info: Unmanaged.passUnretained(self).toOpaque(), retain: nil, release: nil, copyDescription: nil
+        )
+        let callback: FSEventStreamCallback = { _, info, _, _, _, _ in
+            guard let info else { return }
+            Unmanaged<FolderWatcher>.fromOpaque(info).takeUnretainedValue().onChange()
         }
-        let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .rename, .delete, .extend], queue: .main)
-        self.source = source
-        source.setEventHandler { [weak self] in
-            guard let self, !self.pending else { return }
-            self.pending = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                self.pending = false
-                onChange()
-            }
-        }
-        source.setCancelHandler { close(fd) }
-        source.resume()
+        guard let stream = FSEventStreamCreate(
+            nil, callback, &context, [url.path] as CFArray,
+            FSEventStreamEventId(kFSEventStreamEventIdSinceNow), 0.25, FSEventStreamCreateFlags(kFSEventStreamCreateFlagNone)
+        ) else { return }
+        FSEventStreamSetDispatchQueue(stream, .main)
+        FSEventStreamStart(stream)
+        self.stream = stream
     }
 
     deinit {
-        source?.cancel()
+        guard let stream else { return }
+        FSEventStreamStop(stream)
+        FSEventStreamInvalidate(stream)
+        FSEventStreamRelease(stream)
     }
 }
