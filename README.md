@@ -12,12 +12,13 @@ and [docs/DSL.md](docs/DSL.md) for the drawing language.
 Only the Xcode Command Line Tools are needed.
 
 ```sh
-Scripts/build.sh app                 # .build/Whiteprint.app (this Mac's architecture)
-CONFIG=release Scripts/build.sh dmg  # universal .build/Whiteprint.dmg
-Scripts/test.sh                      # every module's tests
+Scripts/build.sh app        # .build/Whiteprint.app (this Mac's architecture)
+Scripts/release.sh 0.1.0    # universal, signed .build/release/Whiteprint-0.1.0.dmg
+Scripts/test.sh             # every module's tests
 ```
 
-With Xcode installed, `swift build` and `swift test` work too.
+With Xcode installed, `swift build` and `swift test` work too. Releases are built by GitHub
+Actions when a `v*` tag is pushed; see [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Modules
 

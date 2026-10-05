@@ -5,7 +5,7 @@
 #   Scripts/build.sh                    build every module and both executables
 #   Scripts/build.sh WhiteprintRender   build one module and what it depends on
 #   Scripts/build.sh app                build .build/Whiteprint.app
-#   Scripts/build.sh dmg                build .build/Whiteprint.dmg
+#   Scripts/build.sh dmg [version]      same as Scripts/release.sh (see docs/RELEASING.md)
 #
 #   CONFIG=release   optimised build (default: debug)
 #   ARCHS="arm64 x86_64"   architectures (default: this Mac; release: both)
@@ -115,21 +115,9 @@ bundle() {
     echo "✓ $app"
 }
 
-dmg() {
-    bundle
-    local stage=$ROOT/.build/dmg
-    rm -rf "$stage" "$ROOT/.build/Whiteprint.dmg"
-    mkdir -p "$stage"
-    cp -R "$ROOT/.build/Whiteprint.app" "$stage/"
-    ln -s /Applications "$stage/Applications"
-    hdiutil create -quiet -volname Whiteprint -srcfolder "$stage" -ov -format UDZO "$ROOT/.build/Whiteprint.dmg"
-    rm -rf "$stage"
-    echo "✓ $ROOT/.build/Whiteprint.dmg"
-}
-
 case "${1:-all}" in
     all) build $LIBS $EXES ;;
     app) bundle ;;
-    dmg) dmg ;;
+    dmg) shift; exec "$ROOT/Scripts/release.sh" "$@" ;;
     *) build "$@" ;;
 esac
