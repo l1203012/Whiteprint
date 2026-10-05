@@ -47,7 +47,7 @@ if (-not $iscc) { throw "ISCC.exe (Inno Setup 6) not found" }
 if ($LASTEXITCODE) { throw "ISCC failed" }
 
 $setup = "$out\Whiteprint-$Version-Setup.exe"
-$hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLower()
+$hash = ([System.BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash([System.IO.File]::ReadAllBytes($setup))) -replace "-","").ToLower()
 # Same format as shasum output on macOS: "<hash>  <file>".
 [IO.File]::WriteAllText("$setup.sha256", "$hash  Whiteprint-$Version-Setup.exe`n")
 Write-Host "Wrote $setup"

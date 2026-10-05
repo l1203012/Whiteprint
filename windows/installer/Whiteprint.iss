@@ -2,6 +2,8 @@
 #ifndef AppVersion
   #define AppVersion "0.1.0"
 #endif
+; VersionInfoVersion must be numeric (0.1.0-beta.1 -> 0.1.0.0).
+#define NumericVersion Copy(AppVersion, 1, Pos("-", AppVersion + "-") - 1) + ".0"
 #ifndef StageDir
   #define StageDir "..\..\.build\windows-stage"
 #endif
@@ -33,7 +35,7 @@ Compression=lzma2/max
 SolidCompression=yes
 ChangesAssociations=yes
 DisableProgramGroupPage=yes
-VersionInfoVersion={#AppVersion}
+VersionInfoVersion={#NumericVersion}
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
