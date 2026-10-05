@@ -13,6 +13,9 @@ struct Colors {
     QColor window, sidebar, control, controlBorder, text, secondaryText, accent, separator, selection, selectionText;
 };
 
+// Forces light (0) or dark (1) regardless of Windows; -1 follows Windows again. For tests and screenshots.
+void setDarkOverride(int mode);
+
 // True when Windows is in dark app mode (re-evaluated on call).
 bool isDark();
 Colors colors();

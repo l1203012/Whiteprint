@@ -9,8 +9,12 @@
 
 namespace wp::mac {
 
+static int g_darkOverride = -1;
+void setDarkOverride(int mode) { g_darkOverride = mode; }
+
 bool isDark() {
-    QSettings s("HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+    if (g_darkOverride >= 0) return g_darkOverride == 1;
+    QSettings s("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
                 QSettings::NativeFormat);
     return s.value("AppsUseLightTheme", 1).toInt() == 0;
 }
