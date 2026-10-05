@@ -8,7 +8,7 @@ extension WhiteprintText {
     Whiteprint drawing language. One statement per line, # comments. Units: grid squares (1 = 10 pt), \
     origin top-left, y down. Arguments in any order.
 
-    Shapes (no position = placed automatically below everything else; \\n in labels = new line):
+    Shapes (no position = placed below everything else; no label = the id, except ids like a or b2; \\n in labels = new line):
     box ID [X,Y] [WxH] ["label"]     default 10x4, grows to fit label
     circle ID [X,Y] [D|WxH] ["label"]
     db ID [X,Y] [WxH] ["label"]      database cylinder

@@ -133,12 +133,21 @@ private struct SceneBuilder {
             return
         }
         definedOn[id] = line
+        let label = label ?? Self.defaultLabel(for: id, kind: kind)
         let frame = GridRect(origin: at ?? .zero, size: size ?? DrawingDefaults.size(for: kind, label: label))
         shapeIndex[id] = scene.shapes.count
         scene.shapes.append(SceneShape(id: id, kind: kind, frame: frame, label: label, style: style))
         if at != nil {
             placed.insert(id)
         }
+    }
+
+    /// A shape without a label shows its id (`_` as space), so `db Postgres`
+    /// needs no `"Postgres"`. Handle-style ids such as `a` or `b2` stay blank.
+    private static func defaultLabel(for id: String, kind: ShapeKind) -> String? {
+        guard kind != .text, let first = id.first, first.isLetter else { return nil }
+        if id.dropFirst().allSatisfy(\.isNumber) { return nil }
+        return id.replacingOccurrences(of: "_", with: " ")
     }
 
     /// Unnamed text gets an internal `_tN` id, skipping any id the source uses itself.

@@ -13,7 +13,8 @@ db ID [X,Y] [WxH] ["label"]              database cylinder, default 8x5
 text [ID] [X,Y] "label"
 ```
 
-Shapes without a position or layout go in a row below everything else. Use `\n` in a label for a new line.
+Shapes without a position or layout go in a row below everything else. Shapes without a label show
+their id (`_` → space), except one-letter ids like `a` or `b2`. Use `\n` in a label for a new line.
 
 ## Lines
 

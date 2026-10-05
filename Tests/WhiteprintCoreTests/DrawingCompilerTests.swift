@@ -61,6 +61,18 @@ final class DrawingCompilerTests: XCTestCase {
         XCTAssertFalse(scene.lines[0].startArrow)
     }
 
+    func testUnlabelledShapesShowTheirIDUnlessItIsAHandle() {
+        let scene = compile("""
+        db Postgres
+        box Web_App
+        circle a
+        box b2
+        box DB
+        """)
+        XCTAssertEqual(scene.shapes.map(\.label), ["Postgres", "Web App", nil, nil, "DB"])
+        XCTAssertEqual(scene.shape("Postgres")?.frame.size, GridSize(9, 5))
+    }
+
     func testFlowUsesDeclaredShapesEvenWhenDeclaredLater() {
         let scene = compile("""
         flow a>b
