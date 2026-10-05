@@ -1,4 +1,6 @@
-# Builds every module and the app, and runs the tests.
+# Tests every change on Apple Silicon and Intel, keeps the Command Line Tools
+# build working, lints the scripts and workflows, and uploads a PR build of the
+# app for testers. See docs/RELEASING.md for the whole pipeline.
 name: CI
 
 on:
@@ -6,31 +8,156 @@ on:
     branches: [main-macos]
   pull_request:
     branches: [main-macos]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+# A new push to a pull request cancels its older runs; pushes to main-macos
+# each get their own group, so none of them is cancelled or skipped.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ${{ github.event_name == 'pull_request' && format('ci-pr-{0}', github.event.pull_request.number) || format('ci-run-{0}', github.run_id) }}
   cancel-in-progress: true
 
 jobs:
-  build:
-    runs-on: macos-14
+  test:
+    name: test (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Apple Silicon
+            os: macos-14
+          # The maintainer develops on an Intel Mac.
+          - name: Intel
+            os: macos-15-intel
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    env:
+      WHITEPRINT_TEST_RUNNER: swiftpm
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v7
 
       - name: Toolchain
-        run: swift --version
+        id: toolchain
+        run: |
+          swift --version
+          echo "hash=$(swift --version 2>&1 | shasum -a 256 | cut -c1-16)" >> "$GITHUB_OUTPUT"
 
-      - name: Build
-        run: Scripts/build.sh
+      # Keyed by runner, toolchain, Package.swift and the sources; a miss falls
+      # back to the newest cache for the same runner and toolchain.
+      - name: Cache SwiftPM build
+        uses: actions/cache@v6
+        with:
+          path: .build
+          key: spm-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.hash }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-${{ hashFiles('Sources/**', 'Tests/**') }}
+          restore-keys: |
+            spm-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.hash }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-
+            spm-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.hash }}-
 
       - name: Test
         run: Scripts/test.sh
 
+  # The plain-swiftc build and the XCTest stand-in, as used on a Mac with only
+  # the Command Line Tools. The runner has Xcode, so the stand-in is forced.
+  clt-path:
+    name: clt-path
+    runs-on: macos-14
+    timeout-minutes: 30
+    env:
+      WHITEPRINT_TEST_RUNNER: shim
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Toolchain
+        run: swift --version
+
+      - name: Build every module
+        run: Scripts/build.sh
+
+      - name: Test with the XCTest stand-in
+        run: Scripts/test.sh
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SHELLCHECK_VERSION: 0.11.0
+      SHELLCHECK_SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
+      ACTIONLINT_VERSION: 1.7.12
+      ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install ShellCheck and actionlint
+        run: |
+          bin="$RUNNER_TEMP/bin"
+          mkdir -p "$bin"
+          cd "$RUNNER_TEMP"
+          curl -fsSL -o shellcheck.tar.xz \
+            "https://github.com/koalaman/shellcheck/releases/download/v$SHELLCHECK_VERSION/shellcheck-v$SHELLCHECK_VERSION.linux.x86_64.tar.xz"
+          echo "$SHELLCHECK_SHA256  shellcheck.tar.xz" | sha256sum -c -
+          tar -xJf shellcheck.tar.xz
+          mv "shellcheck-v$SHELLCHECK_VERSION/shellcheck" "$bin/"
+          curl -fsSL -o actionlint.tar.gz \
+            "https://github.com/rhysd/actionlint/releases/download/v$ACTIONLINT_VERSION/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "$ACTIONLINT_SHA256  actionlint.tar.gz" | sha256sum -c -
+          tar -xzf actionlint.tar.gz actionlint
+          mv actionlint "$bin/"
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: ShellCheck
+        run: |
+          shellcheck --version
+          shellcheck -x Scripts/*.sh
+
+      # actionlint also runs ShellCheck on the workflows' run: blocks.
+      - name: actionlint
+        run: actionlint -color
+
+      - name: Scripts/targets.sh matches Package.swift
+        run: Scripts/check-targets.sh
+
+  # A debug build of the app for both architectures, zipped for testers.
+  app:
+    name: app
+    needs: test
+    runs-on: macos-14
+    timeout-minutes: 30
+    env:
+      ARCHS: arm64 x86_64
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # build.sh numbers builds by commit count.
+          fetch-depth: 0
+
       - name: Build app
         run: Scripts/build.sh app
+
+      - name: Zip app
+        env:
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          zip="Whiteprint-app-${SHA:0:7}.zip"
+          ditto -c -k --keepParent .build/Whiteprint.app "$zip"
+          echo "ZIP=$zip" >> "$GITHUB_ENV"
+
+      # Uploaded as is, so the download is the zip itself rather than a zip in a zip.
+      - uses: actions/upload-artifact@v7
+        with:
+          path: ${{ env.ZIP }}
+          archive: false
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Summary
+        run: |
+          {
+            echo "### Whiteprint app build"
+            echo
+            echo "Download **${ZIP}** under *Artifacts* below (kept 14 days), unzip it and"
+            echo "open Whiteprint.app. It is a debug build for Intel and Apple Silicon, ad-hoc"
+            echo "signed: the first time, right-click it and choose **Open**."
+          } >> "$GITHUB_STEP_SUMMARY"
