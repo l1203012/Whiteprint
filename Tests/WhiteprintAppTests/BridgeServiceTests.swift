@@ -165,7 +165,7 @@ final class BridgeServiceTests: XCTestCase {
     }
 
     func testCreateNoteReturnsNewID() async throws {
-        let reply = try await ok(.createNote(title: "Plan", markdown: "# Plan\n+++page\nMore"))
+        let reply = try await ok(.createNote(title: "Plan", markdown: "# Plan\n+++page\nMore", folder: nil))
         XCTAssertEqual(reply, "ok n1")
         let note = try workspace.note(at: try XCTUnwrap(registry.url(for: "n1")))
         XCTAssertEqual(note.frontMatter.title, "Plan")

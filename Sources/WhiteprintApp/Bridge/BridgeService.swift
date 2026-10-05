@@ -63,7 +63,7 @@ final class BridgeService: BridgeHandler {
                 .map { "=== page \($0) ===\n\(try note.pageSource($0))" }
                 .joined(separator: "\n\n")
 
-        case let .createNote(title, markdown):
+        case let .createNote(title, markdown, _):
             var note = Note(title: title)
             if let markdown, !markdown.isEmpty {
                 try note.write(markdown, page: 1, mode: .replace)

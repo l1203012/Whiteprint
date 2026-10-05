@@ -102,7 +102,7 @@ extension MCPTool {
         },
         MCPTool(name: "create_note", description: "Create a note. Returns its id.",
                 arguments: [.required("title", .string), .optional("markdown", .string)], effect: .additive) {
-            .createNote(title: try $0.string("title"), markdown: $0.optionalString("markdown"))
+            .createNote(title: try $0.string("title"), markdown: $0.optionalString("markdown"), folder: nil)
         },
         MCPTool(name: "write", description: "Append to or replace a page's markdown.",
                 arguments: [

@@ -115,8 +115,8 @@ final class MCPToolsTests: XCTestCase {
         XCTAssertEqual(try request("list_notes", [:]), .listNotes)
         XCTAssertEqual(try request("read_note", ["note": "n1"]), .readNote(note: "n1", page: nil))
         XCTAssertEqual(try request("read_note", ["note": "n1", "page": 2]), .readNote(note: "n1", page: 2))
-        XCTAssertEqual(try request("create_note", ["title": "T"]), .createNote(title: "T", markdown: nil))
-        XCTAssertEqual(try request("create_note", ["title": "T", "markdown": "# Hi"]), .createNote(title: "T", markdown: "# Hi"))
+        XCTAssertEqual(try request("create_note", ["title": "T"]), .createNote(title: "T", markdown: nil, folder: nil))
+        XCTAssertEqual(try request("create_note", ["title": "T", "markdown": "# Hi"]), .createNote(title: "T", markdown: "# Hi", folder: nil))
         XCTAssertEqual(try request("write", ["note": "n1", "page": 1, "markdown": "x", "mode": "append"]),
                        .write(note: "n1", page: 1, markdown: "x", mode: .append))
         XCTAssertEqual(try request("write", ["note": "n1", "page": 3, "markdown": "", "mode": "replace"]),

@@ -64,12 +64,35 @@ public struct StudyPlan: Codable, Equatable {
     public var tasks: [StudyTask]
     /// Optional diagrams in the drawing language.
     public var diagrams: [String]
+    /// Question/answer cards for practising the must-know points.
+    public var flashcards: [Flashcard]
 
-    public init(title: String, overview: String, modules: [StudyModule], tasks: [StudyTask] = [], diagrams: [String] = []) {
+    public init(
+        title: String, overview: String, modules: [StudyModule], tasks: [StudyTask] = [],
+        diagrams: [String] = [], flashcards: [Flashcard] = []
+    ) {
         self.title = title
         self.overview = overview
         self.modules = modules
         self.tasks = tasks
         self.diagrams = diagrams
+        self.flashcards = flashcards
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case title, overview, modules, tasks, diagrams, flashcards
+    }
+
+    /// `tasks`, `diagrams` and `flashcards` may be left out.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            title: try container.decode(String.self, forKey: .title),
+            overview: try container.decode(String.self, forKey: .overview),
+            modules: try container.decode([StudyModule].self, forKey: .modules),
+            tasks: try container.decodeIfPresent([StudyTask].self, forKey: .tasks) ?? [],
+            diagrams: try container.decodeIfPresent([String].self, forKey: .diagrams) ?? [],
+            flashcards: try container.decodeIfPresent([Flashcard].self, forKey: .flashcards) ?? []
+        )
     }
 }

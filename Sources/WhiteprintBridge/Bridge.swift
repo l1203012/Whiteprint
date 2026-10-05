@@ -12,7 +12,8 @@ public enum BridgeRequest: Codable, Equatable {
     case ping
     case listNotes
     case readNote(note: String, page: Int?)
-    case createNote(title: String, markdown: String?)
+    /// `folder` is relative to the notes folder (e.g. `Courses/Networks`); nil = top level.
+    case createNote(title: String, markdown: String?, folder: String?)
     case write(note: String, page: Int, markdown: String, mode: WriteMode)
     case draw(note: String, page: Int, dsl: String, after: String?)
     case editDrawing(note: String, drawing: String, dsl: String)
@@ -24,6 +25,9 @@ public enum BridgeRequest: Codable, Equatable {
     case savePoints(importID: String, chunk: Int, points: [StudyPoint])
     case getPoints(importID: String?)
     case buildStudyPlan(importIDs: [String], plan: StudyPlan)
+    /// Adds a deck to `note` (at the end of `page`, default the last page), or
+    /// creates a new note for it when `note` is nil. Reply: `ok n4 c1`.
+    case createFlashcards(note: String?, page: Int?, title: String, cards: [Flashcard])
 }
 
 /// Replies are short text, passed straight to Claude as the tool result.
@@ -100,5 +104,31 @@ public enum BridgePaths {
     /// `whiteprint-mcp` inside the running app bundle.
     public static var helperExecutable: URL {
         Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/whiteprint-mcp")
+    }
+}
+
+// CONTRACT (owner: backend agent): the MCP tool catalog, shared with in-app
+// agents (the Grok runner) so they offer Claude's exact tools.
+public struct AgentTool {
+    public var name: String
+    public var description: String
+    /// JSON Schema object, as sent in MCP `tools/list`.
+    public var inputSchema: [String: Any]
+
+    public init(name: String, description: String, inputSchema: [String: Any]) {
+        self.name = name
+        self.description = description
+        self.inputSchema = inputSchema
+    }
+}
+
+public enum MCPToolCatalog {
+    /// Every Whiteprint tool, in `tools/list` order.
+    public static var tools: [AgentTool] { [] }
+
+    /// Validates `arguments` (a decoded JSON object) for tool `name` and maps
+    /// them to a request. Throws an error whose description is one actionable line.
+    public static func request(forTool name: String, arguments: [String: Any]) throws -> BridgeRequest {
+        throw BridgeError.badReply("unknown tool \(name)")
     }
 }

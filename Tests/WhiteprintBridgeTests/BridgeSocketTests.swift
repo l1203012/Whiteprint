@@ -23,7 +23,7 @@ private final class TestHandler: BridgeHandler {
         switch request {
         case .ping:
             reply(.ok("pong"))
-        case let .createNote(title, markdown):
+        case let .createNote(title, markdown, _):
             DispatchQueue.global().async { reply(.ok("\(title) \(markdown?.count ?? 0)")) }
         case .listImports:
             break
@@ -116,7 +116,7 @@ final class BridgeSocketTests: XCTestCase {
         try server.start()
         let client = self.client
         let replies = try await background { () -> [BridgeResponse] in
-            [try client.send(.ping), try client.send(.createNote(title: "T", markdown: "abc")),
+            [try client.send(.ping), try client.send(.createNote(title: "T", markdown: "abc", folder: nil)),
              try client.send(.readNote(note: "n1", page: 2))]
         }
         XCTAssertEqual(replies, [.ok("pong"), .ok("T 3"), .ok("\(BridgeRequest.readNote(note: "n1", page: 2))")])
@@ -140,7 +140,7 @@ final class BridgeSocketTests: XCTestCase {
         let markdown = String(repeating: "Lorem ipsum dolor sit amet.\n", count: 60_000)
         XCTAssertGreaterThan(markdown.utf8.count, 1_500_000)
         let client = self.client
-        let reply = try await background { try client.send(.createNote(title: "Big", markdown: markdown)) }
+        let reply = try await background { try client.send(.createNote(title: "Big", markdown: markdown, folder: nil)) }
         XCTAssertEqual(reply, .ok("Big \(markdown.count)"))
     }
 
@@ -151,7 +151,7 @@ final class BridgeSocketTests: XCTestCase {
             let results = Results()
             DispatchQueue.concurrentPerform(iterations: 16) { i in
                 let reply = try? BridgeClient(socketURL: URL(fileURLWithPath: path))
-                    .send(.createNote(title: "c\(i)", markdown: String(repeating: "x", count: i * 10_000)), timeout: 10)
+                    .send(.createNote(title: "c\(i)", markdown: String(repeating: "x", count: i * 10_000), folder: nil), timeout: 10)
                 results.set(i, reply)
             }
             return results.all
@@ -161,7 +161,7 @@ final class BridgeSocketTests: XCTestCase {
 
     func testPipelinedRequestsAndMalformedLines() async throws {
         try server.start()
-        let input = "garbage\n\(try encoded(.ping))\n\n{\"unknownCase\":{}}\n\(try encoded(.createNote(title: "A", markdown: nil)))\n"
+        let input = "garbage\n\(try encoded(.ping))\n\n{\"unknownCase\":{}}\n\(try encoded(.createNote(title: "A", markdown: nil, folder: nil)))\n"
         let lines = try await background { try self.exchange(input, replies: 4) }
         XCTAssertEqual(try lines.map(decoded), [.failure("malformed request"), .ok("pong"), .failure("malformed request"), .ok("A 0")])
     }
