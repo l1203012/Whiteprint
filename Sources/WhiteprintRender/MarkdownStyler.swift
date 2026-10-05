@@ -2,7 +2,8 @@ import AppKit
 
 /// Markdown look shared by the editor and PDF export: headings, bold/italic,
 /// inline code, code blocks, lists, checklists, quotes, links. The markup
-/// characters stay in the text (editing is plain Markdown) but are muted.
+/// characters stay in the text (editing is plain Markdown) but are muted, or,
+/// when concealing, marked with `markupKey` for the editor to hide.
 public enum MarkdownStyler {
     public static let defaultFontSize: CGFloat = 15
 
@@ -15,12 +16,30 @@ public enum MarkdownStyler {
     /// The code fence each line starts inside of, so an incremental restyle
     /// knows its context without re-reading the text above it.
     static let fenceKey = NSAttributedString.Key("WhiteprintMarkdownFence")
+    /// Markup to draw differently while concealing, as a `Markup` raw value
+    /// (`String`). The characters stay in the text; only their glyphs change.
+    public static let markupKey = NSAttributedString.Key("WhiteprintMarkup")
+
+    /// How a concealed piece of markup is drawn.
+    public enum Markup: String {
+        /// Not drawn and takes no space: `#`, `**`, backticks, `> `, fences, link targets.
+        case hidden
+        /// A list marker (`-`, `*`, `+`), drawn as `•`.
+        case bullet
+        /// The `[ ]` of an open checklist item. It keeps its width (and stays
+        /// clickable) but is drawn as an empty box; its text is transparent.
+        case checkbox
+        /// The `[x]` of a ticked checklist item, drawn as a ticked box.
+        case checkedBox
+        /// A `---` divider, drawn as a horizontal rule across the line.
+        case rule
+    }
 
     /// Every attribute the styler sets; restyling removes only these, so
     /// attachments and other attributes survive.
     private static let managedKeys: [NSAttributedString.Key] = [
         .font, .foregroundColor, .backgroundColor, .paragraphStyle,
-        .strikethroughStyle, .strikethroughColor, codeBlockKey, linkKey, fenceKey,
+        .strikethroughStyle, .strikethroughColor, codeBlockKey, linkKey, fenceKey, markupKey,
     ]
 
     /// Restyles `storage` (or just the paragraphs touching `range`).
@@ -28,13 +47,34 @@ public enum MarkdownStyler {
     /// An incremental restyle assumes the rest of `storage` was styled by an
     /// earlier call. It continues past `range` while a code fence opened or
     /// closed inside it changes how the following lines read.
+    ///
+    /// With `concealsMarkup`, markup is marked with `markupKey` instead of
+    /// being shown, except on the lines `revealing` touches (the caret's or
+    /// selection's paragraphs), and list indents follow the concealed markers.
     public static func apply(
         to storage: NSTextStorage, in range: NSRange? = nil,
-        palette: BlueprintPalette, fontSize: CGFloat = defaultFontSize
+        palette: BlueprintPalette, fontSize: CGFloat = defaultFontSize,
+        concealsMarkup: Bool = false, revealing: NSRange? = nil
     ) {
         storage.beginEditing()
-        restyle(storage, in: range, theme: MarkdownTheme(palette: palette, fontSize: fontSize))
+        let concealment = concealsMarkup ? Concealment(revealing: revealing) : nil
+        restyle(storage, in: range, theme: MarkdownTheme(palette: palette, fontSize: fontSize), concealment: concealment)
         storage.endEditing()
+    }
+
+    /// Which lines hide their markup: all but those touching `revealing`.
+    struct Concealment {
+        var revealing: NSRange?
+
+        /// `line` includes its line break, `contents` doesn't.
+        func conceals(line: NSRange, contents: NSRange, textLength: Int) -> Bool {
+            guard let revealing else { return true }
+            if NSIntersectionRange(line, revealing).length > 0 || NSLocationInRange(revealing.location, line) {
+                return false
+            }
+            // A caret at the very end of the text is on the last line, unless that ends in a line break.
+            return !(revealing.location == textLength && NSMaxRange(contents) == textLength)
+        }
     }
 
     /// A styled copy of `markdown`, for read-only display and export.
@@ -42,14 +82,16 @@ public enum MarkdownStyler {
         markdown: String, palette: BlueprintPalette, fontSize: CGFloat = defaultFontSize
     ) -> NSAttributedString {
         let text = NSMutableAttributedString(string: markdown)
-        restyle(text, in: nil, theme: MarkdownTheme(palette: palette, fontSize: fontSize))
+        restyle(text, in: nil, theme: MarkdownTheme(palette: palette, fontSize: fontSize), concealment: nil)
         text.removeAttribute(fenceKey, range: NSRange(location: 0, length: text.length))
         return text
     }
 
     // MARK: Restyling
 
-    private static func restyle(_ text: NSMutableAttributedString, in range: NSRange?, theme: MarkdownTheme) {
+    private static func restyle(
+        _ text: NSMutableAttributedString, in range: NSRange?, theme: MarkdownTheme, concealment: Concealment?
+    ) {
         let string = text.string as NSString
         let length = string.length
         guard length > 0 else { return }
@@ -71,7 +113,8 @@ public enum MarkdownStyler {
             string.getParagraphStart(nil, end: nil, contentsEnd: &contentsEnd, for: lineRange)
             let contents = NSRange(location: lineRange.location, length: contentsEnd - lineRange.location)
             let classified = MarkdownSyntax.classify(string.substring(with: contents), openFence: fence)
-            style(text, line: classified.line, range: lineRange, contents: contents, theme: theme)
+            let conceals = concealment?.conceals(line: lineRange, contents: contents, textLength: length) ?? false
+            style(text, line: classified.line, range: lineRange, contents: contents, theme: theme, conceals: conceals)
             if let fence {
                 text.addAttribute(fenceKey, value: fence.encoded, range: lineRange)
             }
@@ -97,7 +140,8 @@ public enum MarkdownStyler {
     // MARK: Lines
 
     private static func style(
-        _ text: NSMutableAttributedString, line: MarkdownLine, range: NSRange, contents: NSRange, theme: MarkdownTheme
+        _ text: NSMutableAttributedString, line: MarkdownLine, range: NSRange, contents: NSRange,
+        theme: MarkdownTheme, conceals: Bool
     ) {
         for key in managedKeys {
             text.removeAttribute(key, range: range)
@@ -105,6 +149,8 @@ public enum MarkdownStyler {
         let marker = NSRange(location: contents.location, length: min(line.markerLength, contents.length))
         let body = NSRange(location: NSMaxRange(marker), length: contents.length - marker.length)
         let prefix = (text.string as NSString).substring(with: marker)
+        let concealed = conceals ? ConcealedMarker(line: line, prefix: prefix) : nil
+        let shownPrefix = concealed?.shownPrefix ?? prefix
 
         switch line.kind {
         case .fence, .code:
@@ -115,6 +161,9 @@ public enum MarkdownStyler {
                 .paragraphStyle: line.kind == .fence ? theme.fenceParagraph : theme.codeParagraph,
                 codeBlockKey: true,
             ], range: range)
+            if conceals, line.kind == .fence, contents.length > 0 {
+                text.addAttribute(markupKey, value: Markup.hidden.rawValue, range: contents)
+            }
             return
         case .heading(let level):
             text.addAttributes([
@@ -124,17 +173,20 @@ public enum MarkdownStyler {
         case .bullet, .ordered, .task:
             text.addAttributes([
                 .font: theme.body, .foregroundColor: theme.palette.text,
-                .paragraphStyle: theme.hangingParagraph(prefix: prefix, firstLineIndent: 0),
+                .paragraphStyle: theme.hangingParagraph(prefix: shownPrefix, firstLineIndent: 0),
             ], range: range)
         case .quote:
             text.addAttributes([
                 .font: theme.body, .foregroundColor: theme.palette.muted,
-                .paragraphStyle: theme.hangingParagraph(prefix: prefix, firstLineIndent: theme.quoteIndent),
+                .paragraphStyle: theme.hangingParagraph(prefix: shownPrefix, firstLineIndent: theme.quoteIndent),
             ], range: range)
         case .divider:
             text.addAttributes([
                 .font: theme.body, .foregroundColor: theme.palette.muted, .paragraphStyle: theme.bodyParagraph,
             ], range: range)
+            if conceals {
+                text.addAttribute(markupKey, value: Markup.rule.rawValue, range: contents)
+            }
             return
         case .blank, .paragraph:
             text.addAttributes([
@@ -142,11 +194,18 @@ public enum MarkdownStyler {
             ], range: range)
         }
 
-        styleInline(text, in: body, theme: theme)
+        styleInline(text, in: body, theme: theme, conceals: conceals)
         text.addAttribute(.foregroundColor, value: theme.palette.muted, range: marker)
+        for part in concealed?.parts ?? [] {
+            let range = NSRange(location: marker.location + part.range.location, length: part.range.length)
+            text.addAttribute(markupKey, value: part.markup.rawValue, range: range)
+            if part.markup == .checkbox || part.markup == .checkedBox {
+                text.addAttribute(.foregroundColor, value: NSColor.clear, range: range)
+            }
+        }
         if case .task(let checked) = line.kind {
             let box = (prefix as NSString).range(of: "[")
-            if checked, box.location != NSNotFound {
+            if checked, box.location != NSNotFound, !conceals {
                 text.addAttribute(
                     .foregroundColor, value: theme.palette.accent,
                     range: NSRange(location: marker.location + box.location, length: 3)
@@ -162,7 +221,7 @@ public enum MarkdownStyler {
         }
     }
 
-    private static func styleInline(_ text: NSMutableAttributedString, in body: NSRange, theme: MarkdownTheme) {
+    private static func styleInline(_ text: NSMutableAttributedString, in body: NSRange, theme: MarkdownTheme, conceals: Bool) {
         guard body.length > 0 else { return }
         let spans = MarkdownSyntax.spans(in: (text.string as NSString).substring(with: body), offset: body.location)
         for span in spans {
@@ -187,6 +246,9 @@ public enum MarkdownStyler {
         for span in spans {
             for markup in span.markupRanges {
                 text.addAttribute(.foregroundColor, value: theme.palette.muted, range: markup)
+                if conceals {
+                    text.addAttribute(markupKey, value: Markup.hidden.rawValue, range: markup)
+                }
             }
         }
     }
@@ -196,6 +258,50 @@ public enum MarkdownStyler {
             if let font = value as? NSFont {
                 text.addAttribute(.font, value: convert(font), range: run)
             }
+        }
+    }
+}
+
+/// How a line's leading marker looks while concealed: which parts are
+/// hidden or drawn differently (ranges within the marker), and the text that
+/// stays visible, for the hanging indent.
+struct ConcealedMarker: Equatable {
+    struct Part: Equatable {
+        var range: NSRange
+        var markup: MarkdownStyler.Markup
+    }
+
+    var parts: [Part] = []
+    var shownPrefix: String
+
+    init(line: MarkdownLine, prefix: String) {
+        let c = Array(prefix.utf16)
+        let indent = c.prefix(while: MarkdownSyntax.isWhitespace).count
+        let indentText = String(prefix.prefix(indent))
+        func text(from start: Int) -> String {
+            String(utf16CodeUnits: Array(c[start...]), count: c.count - start)
+        }
+        shownPrefix = prefix
+        switch line.kind {
+        case .heading:
+            parts = c.isEmpty ? [] : [Part(range: NSRange(location: 0, length: c.count), markup: .hidden)]
+            shownPrefix = ""
+        case .quote:
+            parts = indent < c.count ? [Part(range: NSRange(location: indent, length: c.count - indent), markup: .hidden)] : []
+            shownPrefix = indentText
+        case .bullet:
+            guard indent < c.count else { break }
+            parts = [Part(range: NSRange(location: indent, length: 1), markup: .bullet)]
+            shownPrefix = indentText + "•" + text(from: indent + 1)
+        case .task(let checked):
+            guard let box = c.firstIndex(of: MarkdownSyntax.openBracket), box + 3 <= c.count else { break }
+            parts = [
+                Part(range: NSRange(location: indent, length: box - indent), markup: .hidden),
+                Part(range: NSRange(location: box, length: 3), markup: checked ? .checkedBox : .checkbox),
+            ]
+            shownPrefix = indentText + text(from: box)
+        case .blank, .paragraph, .ordered, .divider, .fence, .code:
+            break
         }
     }
 }
