@@ -41,13 +41,9 @@ struct EditorPage: Equatable {
 }
 
 /// A block's position: 0-based page and block indices.
-struct BlockLocation: Equatable, Comparable {
+struct BlockLocation: Equatable {
     var page: Int
     var block: Int
-
-    static func < (a: BlockLocation, b: BlockLocation) -> Bool {
-        (a.page, a.block) < (b.page, b.block)
-    }
 }
 
 /// The editor's model of a note: pages of identified blocks.
@@ -84,8 +80,6 @@ struct EditorDocument: Equatable {
     }
 
     // MARK: Lookup
-
-    var blockCount: Int { pages.reduce(0) { $0 + $1.blocks.count } }
 
     subscript(location: BlockLocation) -> EditorBlock {
         pages[location.page].blocks[location.block]
