@@ -5,13 +5,14 @@ import WhiteprintStudy
 
 /// App lifecycle: menus, the bridge server, the notes folder and the
 /// app-wide actions (new note, palette, study panel, settings).
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemValidation {
     private var server: BridgeServer?
     private var settings: SettingsWindowController?
     private var reference: NSWindowController?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = MainMenu.make(recentDelegate: self)
+        NSApp.isAutomaticCustomizeTouchBarMenuItemEnabled = true
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -28,8 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         DispatchQueue.main.async {
             guard NoteDocuments.open.isEmpty else { return }
             self.openStartupNote()
-        }
-    }
+        }    }
 
     func applicationWillTerminate(_ notification: Notification) {
         server?.stop()
@@ -68,15 +68,71 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: Actions
 
+    /// A new note in a new tab, in the folder selected in the front window's sidebar.
     @IBAction func newNote(_ sender: Any?) {
+        newNote(in: (NoteDocuments.frontWindow?.windowController as? NoteWindowController)?.selectedFolder)
+    }
+
+    func newNote(in folder: URL?) {
         let library = AppServices.shared.library
         do {
-            let url = try library.folder.save(Note(), title: NoteTitle.untitled)
+            let url = try library.folder.save(Note(), title: NoteTitle.untitled, in: folder)
             library.reload()
             NoteDocuments.open(url)
         } catch {
             NSApp.presentError(error)
         }
+    }
+
+    @IBAction func newFolder(_ sender: Any?) {
+        if let controller = NoteDocuments.frontWindow?.windowController as? NoteWindowController {
+            controller.newFolder(sender)
+        } else {
+            createFolder(in: nil)
+        }
+    }
+
+    @discardableResult
+    func createFolder(in parent: URL?) -> URL? {
+        let library = AppServices.shared.library
+        do {
+            let url = try library.folder.createFolder(in: parent)
+            library.reload()
+            return url
+        } catch {
+            NSApp.presentError(error)
+            return nil
+        }
+    }
+
+    @IBAction func studyFlashcards(_ sender: Any?) {
+        if let controller = NoteDocuments.frontWindow?.windowController as? NoteWindowController {
+            controller.studyFlashcards(sender)
+        } else {
+            CommandPalette.shared.showDecks(over: nil)
+        }
+    }
+
+    @IBAction func setPageLayout(_ sender: Any?) {
+        guard let raw = (sender as? NSMenuItem)?.representedObject as? String,
+              let mode = PageLayoutMode(rawValue: raw) else { return }
+        ViewPreferences.shared.layoutMode = mode
+    }
+
+    @IBAction func toggleMarkdownSyntax(_ sender: Any?) {
+        ViewPreferences.shared.showsMarkdownSyntax.toggle()
+    }
+
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        switch item.action {
+        case #selector(setPageLayout(_:)):
+            item.state = item.representedObject as? String == ViewPreferences.shared.layoutMode.rawValue ? .on : .off
+        case #selector(toggleMarkdownSyntax(_:)):
+            item.state = ViewPreferences.shared.showsMarkdownSyntax ? .on : .off
+        default:
+            break
+        }
+        return true
     }
 
     @IBAction func showCommandPalette(_ sender: Any?) {

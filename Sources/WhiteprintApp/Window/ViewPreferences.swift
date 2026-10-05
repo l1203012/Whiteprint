@@ -1,0 +1,43 @@
+import Foundation
+import WhiteprintEditor
+
+extension Notification.Name {
+    /// Posted when a view preference changes; every open editor applies it.
+    static let viewPreferencesDidChange = Notification.Name("WhiteprintViewPreferencesDidChange")
+}
+
+/// App-wide editor display options from the View menu and the Touch Bar.
+final class ViewPreferences {
+    static let shared = ViewPreferences(defaults: AppDefaults.store)
+
+    static let layoutKey = "PageLayout"
+    static let syntaxKey = "ShowMarkdownSyntax"
+
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults) {
+        self.defaults = defaults
+    }
+
+    var layoutMode: PageLayoutMode {
+        get { defaults.string(forKey: Self.layoutKey).flatMap(PageLayoutMode.init(rawValue:)) ?? .slides }
+        set {
+            guard newValue != layoutMode else { return }
+            defaults.set(newValue.rawValue, forKey: Self.layoutKey)
+            changed()
+        }
+    }
+
+    var showsMarkdownSyntax: Bool {
+        get { defaults.bool(forKey: Self.syntaxKey) }
+        set {
+            guard newValue != showsMarkdownSyntax else { return }
+            defaults.set(newValue, forKey: Self.syntaxKey)
+            changed()
+        }
+    }
+
+    private func changed() {
+        NotificationCenter.default.post(name: .viewPreferencesDidChange, object: self)
+    }
+}

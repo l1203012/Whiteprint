@@ -2,13 +2,19 @@ import AppKit
 import WhiteprintCore
 import WhiteprintEditor
 
-/// One note's window: sidebar, slim breadcrumb toolbar and the editor.
-final class NoteWindowController: NSWindowController, NSWindowDelegate, NSToolbarDelegate {
+/// One note's window: sidebar, slim breadcrumb toolbar and the editor. Note
+/// windows open as tabs of the frontmost note window.
+final class NoteWindowController: NSWindowController, NSWindowDelegate, NSToolbarDelegate, NSMenuItemValidation {
+    static let tabbingIdentifier = "io.github.l1203012.whiteprint.note"
+    /// The tab bar is shown once per launch; after that it's the user's to hide.
+    private static var hasShownTabBar = false
+
     private(set) weak var noteDocument: NoteDocument?
     private let editor: NoteEditorView
     private let sidebar: SidebarViewController
     private let breadcrumb = NSTextField(labelWithString: "")
-    private var observer: NSObjectProtocol?
+    private var observers: [NSObjectProtocol] = []
+    private let touchBarProvider = NoteTouchBar()
     private(set) var visiblePage = 1
 
     init(document: NoteDocument) {
@@ -24,7 +30,8 @@ final class NoteWindowController: NSWindowController, NSWindowDelegate, NSToolba
         window.minSize = NSSize(width: 560, height: 420)
         window.titleVisibility = .hidden
         window.toolbarStyle = .unified
-        window.tabbingMode = .disallowed
+        window.tabbingMode = .preferred
+        window.tabbingIdentifier = Self.tabbingIdentifier
 
         let split = NSSplitViewController()
         let sidebarItem = NSSplitViewItem(sidebarWithViewController: sidebar)
@@ -56,9 +63,20 @@ final class NoteWindowController: NSWindowController, NSWindowDelegate, NSToolba
         sidebar.windowController = self
         editor.onChange = { [weak document] note in document?.editorDidChange(note) }
         editor.onVisiblePageChange = { [weak self] page in self?.visiblePageChanged(page) }
-        observer = NotificationCenter.default.addObserver(forName: .noteDocumentDidChange, object: document, queue: .main) { [weak self] notification in
-            self?.documentChanged(origin: notification.userInfo?["origin"] as? NoteDocument.ChangeOrigin)
-        }
+        editor.onStudyDeck = { [weak self] deck in self?.study(deck) }
+        let center = NotificationCenter.default
+        observers = [
+            center.addObserver(forName: .noteDocumentDidChange, object: document, queue: .main) { [weak self] notification in
+                self?.documentChanged(origin: notification.userInfo?["origin"] as? NoteDocument.ChangeOrigin)
+            },
+            center.addObserver(forName: .noteDocumentDidMove, object: document, queue: .main) { [weak self] _ in
+                self?.updateBreadcrumb()
+            },
+            center.addObserver(forName: .viewPreferencesDidChange, object: nil, queue: .main) { [weak self] _ in
+                self?.applyViewPreferences()
+            },
+        ]
+        applyViewPreferences()
         updateBreadcrumb()
         sidebar.reloadAll()
     }
@@ -69,11 +87,32 @@ final class NoteWindowController: NSWindowController, NSWindowDelegate, NSToolba
     }
 
     deinit {
-        observer.map(NotificationCenter.default.removeObserver)
+        observers.forEach(NotificationCenter.default.removeObserver)
     }
 
     var note: Note {
         noteDocument?.note ?? editor.note
+    }
+
+    /// Joins the frontmost note window as a new tab when first shown.
+    override func showWindow(_ sender: Any?) {
+        if let window, !window.isVisible, window.tabbedWindows == nil,
+           let host = NoteDocuments.frontWindow, host !== window {
+            host.addTabbedWindow(window, ordered: .above)
+        }
+        super.showWindow(sender)
+        if !Self.hasShownTabBar, let window, let group = window.tabGroup {
+            Self.hasShownTabBar = true
+            if !group.isTabBarVisible { window.toggleTabBar(nil) }
+        }
+    }
+
+    private func applyViewPreferences() {
+        let preferences = ViewPreferences.shared
+        if editor.layoutMode != preferences.layoutMode { editor.layoutMode = preferences.layoutMode }
+        if editor.showsMarkdownSyntax != preferences.showsMarkdownSyntax {
+            editor.showsMarkdownSyntax = preferences.showsMarkdownSyntax
+        }
     }
 
     private func documentChanged(origin: NoteDocument.ChangeOrigin?) {
@@ -102,6 +141,11 @@ final class NoteWindowController: NSWindowController, NSWindowDelegate, NSToolba
         window?.makeFirstResponder(editor)
     }
 
+    /// The folder ⌘N creates notes in: the one selected in the sidebar, or the current note's.
+    var selectedFolder: URL? {
+        sidebar.selectedFolder
+    }
+
     private func updateBreadcrumb() {
         let muted: [NSAttributedString.Key: Any] = [
             .foregroundColor: NSColor.secondaryLabelColor,
@@ -111,7 +155,9 @@ final class NoteWindowController: NSWindowController, NSWindowDelegate, NSToolba
             .foregroundColor: NSColor.labelColor,
             .font: NSFont.systemFont(ofSize: 13, weight: .medium),
         ]
-        let text = NSMutableAttributedString(string: "Notes  /  ", attributes: muted)
+        let folders = noteDocument?.fileURL.flatMap(AppServices.shared.library.folder.relativeFolder(of:)) ?? ""
+        let trail = (["Notes"] + folders.split(separator: "/").map(String.init)).joined(separator: "  /  ")
+        let text = NSMutableAttributedString(string: trail + "  /  ", attributes: muted)
         text.append(NSAttributedString(string: noteDocument?.title ?? NoteTitle.untitled, attributes: strong))
         if note.pages.count > 1 {
             text.append(NSAttributedString(string: "  /  Page \(visiblePage)", attributes: muted))
@@ -134,10 +180,59 @@ final class NoteWindowController: NSWindowController, NSWindowDelegate, NSToolba
         editor.insertDrawingAtSelection()
     }
 
+    @IBAction func insertFlashcards(_ sender: Any?) {
+        editor.insertDeckAtSelection()
+    }
+
+    /// A Format menu item; its `representedObject` is an `EditorCommand` raw value.
+    @IBAction func performEditorCommand(_ sender: Any?) {
+        guard let raw = (sender as? NSMenuItem)?.representedObject as? String,
+              let command = EditorCommand(rawValue: raw) else { return }
+        editor.perform(command)
+    }
+
+    /// Studies this note's deck, or offers every deck when it has several or none.
+    @IBAction func studyFlashcards(_ sender: Any?) {
+        let decks = note.decks.filter { !$0.cards.isEmpty }
+        if decks.count == 1 {
+            study(decks[0])
+        } else {
+            CommandPalette.shared.showDecks(over: window)
+        }
+    }
+
+    /// ⇧⌘N: a folder inside the selected one, named in place in the sidebar.
+    @IBAction func newFolder(_ sender: Any?) {
+        sidebar.newFolder(in: selectedFolder)
+    }
+
+    /// ⌘T and the tab bar's + button: a new note in a new tab of this window.
+    @IBAction override func newWindowForTab(_ sender: Any?) {
+        (NSApp.delegate as? AppDelegate)?.newNote(sender)
+    }
+
+    private func study(_ deck: CardDeck) {
+        guard let url = noteDocument?.fileURL else { return }
+        FlashcardStudyWindowController.show(note: url, deckID: deck.id)
+    }
+
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        if item.action == #selector(performEditorCommand(_:)) {
+            return (item.representedObject as? String).flatMap(EditorCommand.init(rawValue:)) != nil
+        }
+        return true
+    }
+
     // MARK: NSWindowDelegate
 
     func windowDidBecomeMain(_ notification: Notification) {
         sidebar.reloadAll()
+    }
+
+    // MARK: Touch Bar
+
+    override func makeTouchBar() -> NSTouchBar? {
+        touchBarProvider.makeTouchBar()
     }
 
     // MARK: Toolbar
@@ -183,6 +278,8 @@ final class NoteWindowController: NSWindowController, NSWindowDelegate, NSToolba
         menu.addItem(.separator())
         menu.addItem(withTitle: "Add Page", action: #selector(addPage(_:)), keyEquivalent: "")
         menu.addItem(withTitle: "Insert Drawing", action: #selector(insertDrawing(_:)), keyEquivalent: "")
+        menu.addItem(withTitle: "Insert Flashcards", action: #selector(insertFlashcards(_:)), keyEquivalent: "")
+        menu.addItem(withTitle: "Study Flashcards…", action: #selector(studyFlashcards(_:)), keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: "Show in Finder", action: #selector(NoteDocument.showInFinder(_:)), keyEquivalent: "")
         return menu

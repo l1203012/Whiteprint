@@ -3,7 +3,7 @@ import AppKit
 /// One row of the command palette.
 struct PaletteItem {
     enum Kind {
-        case note, page, command
+        case note, page, command, deck
     }
 
     var kind: Kind
@@ -13,7 +13,8 @@ struct PaletteItem {
     var run: () -> Void
 }
 
-/// ⌘K: a centred floating panel to jump to notes and pages and run commands.
+/// ⌘K: a centred floating panel to jump to notes and pages, run commands
+/// and pick a flashcard deck to study.
 /// Arrow keys move, Return runs, Escape (or clicking elsewhere) closes.
 final class CommandPalette: NSObject, NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate, NSWindowDelegate {
     static let shared = CommandPalette()
@@ -25,7 +26,26 @@ final class CommandPalette: NSObject, NSTextFieldDelegate, NSTableViewDataSource
     private var shown: [PaletteItem] = []
 
     func show(over window: NSWindow?) {
-        items = Self.items(for: window?.windowController as? NoteWindowController)
+        show(over: window, items: Self.items(for: window?.windowController as? NoteWindowController),
+             placeholder: "Search notes, pages and commands")
+    }
+
+    /// Lists every flashcard deck; choosing one starts studying it.
+    func showDecks(over window: NSWindow?) {
+        let decks = DeckCatalog.all()
+        let items = decks.map { entry in
+            PaletteItem(kind: .deck, title: entry.title, detail: "\(entry.noteTitle) · \(entry.summary)", symbol: "rectangle.on.rectangle.angled") {
+                FlashcardStudyWindowController.show(note: entry.note, deckID: entry.deck.id)
+            }
+        }
+        let empty = PaletteItem(kind: .command, title: "No flashcards yet — insert a deck with ⇧⌘F", detail: "", symbol: "info.circle") {}
+        show(over: window, items: items.isEmpty ? [empty] : items, placeholder: "Study flashcards: pick a deck")
+    }
+
+    private func show(over window: NSWindow?, items: [PaletteItem], placeholder: String) {
+        self.items = items
+        _ = panel
+        field.placeholderString = placeholder
         field.stringValue = ""
         filter()
         let size = panel.frame.size
@@ -46,7 +66,8 @@ final class CommandPalette: NSObject, NSTextFieldDelegate, NSTableViewDataSource
         var items: [PaletteItem] = []
         let current = controller?.noteDocument?.fileURL?.canonicalFile
         for entry in AppServices.shared.library.entries {
-            items.append(PaletteItem(kind: .note, title: entry.title, detail: entry.url == current ? "Open" : "Note", symbol: "doc.text") {
+            let detail = entry.url == current ? "Open" : entry.folder.flatMap { $0.isEmpty ? nil : $0 } ?? "Note"
+            items.append(PaletteItem(kind: .note, title: entry.title, detail: detail, symbol: "doc.text") {
                 NoteDocuments.open(entry.url)
             })
         }
@@ -60,6 +81,10 @@ final class CommandPalette: NSObject, NSTextFieldDelegate, NSTableViewDataSource
         }
         items += [
             PaletteItem(kind: .command, title: "New note", detail: "⌘N", symbol: "plus", run: { app?.newNote(nil) }),
+            PaletteItem(kind: .command, title: "New folder", detail: "⇧⌘N", symbol: "folder.badge.plus", run: { app?.newFolder(nil) }),
+            PaletteItem(kind: .command, title: "Study flashcards…", detail: "Study", symbol: "rectangle.on.rectangle.angled", run: {
+                CommandPalette.shared.showDecks(over: NoteDocuments.frontWindow)
+            }),
             PaletteItem(kind: .command, title: "Import for study plan", detail: "Study", symbol: "tray.and.arrow.down", run: { app?.showStudyPanel(nil) }),
             PaletteItem(kind: .command, title: "Generate study plan", detail: "Study", symbol: "sparkles", run: { app?.generateStudyPlan(nil) }),
             PaletteItem(kind: .command, title: "Settings", detail: "⌘,", symbol: "gearshape", run: { app?.showSettings(nil) }),
@@ -72,6 +97,7 @@ final class CommandPalette: NSObject, NSTextFieldDelegate, NSTableViewDataSource
             items += [
                 PaletteItem(kind: .command, title: "Add page", detail: "⌥⌘N", symbol: "doc.badge.plus", run: send(#selector(NoteWindowController.addPage(_:)), controller)),
                 PaletteItem(kind: .command, title: "Insert drawing", detail: "⇧⌘D", symbol: "pencil.and.outline", run: send(#selector(NoteWindowController.insertDrawing(_:)), controller)),
+                PaletteItem(kind: .command, title: "Insert flashcards", detail: "⇧⌘F", symbol: "rectangle.on.rectangle.angled", run: send(#selector(NoteWindowController.insertFlashcards(_:)), controller)),
                 PaletteItem(kind: .command, title: "Export as Markdown…", detail: "Export", symbol: "square.and.arrow.up", run: send(#selector(NoteDocument.exportMarkdown(_:)), document)),
                 PaletteItem(kind: .command, title: "Export as PDF (Blueprint)…", detail: "Export", symbol: "square.and.arrow.up", run: send(#selector(NoteDocument.exportBlueprintPDF(_:)), document)),
                 PaletteItem(kind: .command, title: "Export as PDF (Print)…", detail: "Export", symbol: "square.and.arrow.up", run: send(#selector(NoteDocument.exportPrintPDF(_:)), document)),
@@ -179,7 +205,6 @@ final class CommandPalette: NSObject, NSTextFieldDelegate, NSTableViewDataSource
         background.state = .active
         background.blendingMode = .behindWindow
 
-        field.placeholderString = "Search notes, pages and commands"
         field.font = .systemFont(ofSize: 17)
         field.focusRingType = .none
         field.isBordered = false
