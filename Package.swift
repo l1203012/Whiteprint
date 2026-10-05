@@ -27,5 +27,6 @@ let package = Package(
 
         .testTarget(name: "WhiteprintCoreTests", dependencies: ["WhiteprintCore"]),
         .testTarget(name: "WhiteprintBridgeTests", dependencies: ["WhiteprintBridge", "WhiteprintCore"]),
+        .testTarget(name: "WhiteprintStudyTests", dependencies: ["WhiteprintStudy"]),
     ]
 )
