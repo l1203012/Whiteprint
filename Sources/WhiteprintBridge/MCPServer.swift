@@ -80,7 +80,7 @@ public final class MCPServer {
         case "ping":
             return [:]
         case "tools/list":
-            return ["tools": MCPTool.all.map(\.json)]
+            return ["tools": MCPToolCatalog.tools.map(Self.json)]
         case "tools/call":
             return try callTool(params)
         case "resources/list":
@@ -94,15 +94,7 @@ public final class MCPServer {
             guard uri == Self.dslURI else { throw RPCError(-32002, "resource not found: \(uri)") }
             return ["contents": [["uri": uri, "mimeType": "text/plain", "text": WhiteprintText.dslReference]]]
         case "prompts/list":
-            let imports: [String: Any] = [
-                "name": "imports", "description": "Import ids, comma-separated (default: all)", "required": false,
-            ]
-            let studyPlan: [String: Any] = [
-                "name": "study_plan",
-                "description": "Build a study plan from imported course material.",
-                "arguments": [imports],
-            ]
-            return ["prompts": [studyPlan]]
+            return ["prompts": Self.prompts.map(\.json)]
         case "prompts/get":
             return try prompt(params)
         default:
@@ -112,16 +104,15 @@ public final class MCPServer {
 
     private func callTool(_ params: [String: Any]) throws -> [String: Any] {
         guard let name = params["name"] as? String else { throw RPCError(-32602, "missing tool name") }
-        guard let tool = MCPTool.named(name) else { throw RPCError(-32602, "unknown tool: \(name)") }
-        let arguments = params["arguments"] ?? [String: Any]()
-        guard let object = arguments as? [String: Any] else {
-            return Self.toolResult("Invalid arguments: expected an object", isError: true)
-        }
+        guard MCPTool.named(name) != nil else { throw RPCError(-32602, "\(ToolCallError.unknownTool(name))") }
         let request: BridgeRequest
         do {
-            request = try tool.makeRequest(object)
+            guard let object = (params["arguments"] ?? [String: Any]()) as? [String: Any] else {
+                throw ToolCallError.invalidArguments("expected an object")
+            }
+            request = try MCPToolCatalog.request(forTool: name, arguments: object)
         } catch {
-            return Self.toolResult("Invalid arguments: \(error)", isError: true)
+            return Self.toolResult("\(error)", isError: true)
         }
         do {
             switch try send(request) {
@@ -138,20 +129,25 @@ public final class MCPServer {
 
     private func prompt(_ params: [String: Any]) throws -> [String: Any] {
         guard let name = params["name"] as? String else { throw RPCError(-32602, "missing prompt name") }
-        guard name == "study_plan" else { throw RPCError(-32602, "unknown prompt: \(name)") }
-        var text = WhiteprintText.studyPlanPrompt
+        guard let prompt = Self.prompts.first(where: { $0.name == name }) else { throw RPCError(-32602, "unknown prompt: \(name)") }
         let arguments = params["arguments"] as? [String: Any] ?? [:]
-        if let imports = arguments["imports"] as? String, !imports.trimmingCharacters(in: .whitespaces).isEmpty {
-            text += "\n\nImports: \(imports)"
+        let value = (arguments[prompt.argument.name] as? String ?? "").trimmingCharacters(in: .whitespaces)
+        if value.isEmpty && prompt.argument.required {
+            throw RPCError(-32602, "missing argument: \(prompt.argument.name)")
         }
+        let text = value.isEmpty ? prompt.text : prompt.text + "\n\n\(prompt.argument.label): \(value)"
         return [
-            "description": "Build a study plan",
+            "description": prompt.description,
             "messages": [["role": "user", "content": ["type": "text", "text": text]] as [String: Any]],
         ]
     }
 
     private static var version: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+    }
+
+    private static func json(_ tool: AgentTool) -> [String: Any] {
+        ["name": tool.name, "description": tool.description, "inputSchema": tool.inputSchema, "annotations": tool.annotations]
     }
 
     private static func toolResult(_ text: String, isError: Bool) -> [String: Any] {
@@ -173,6 +169,42 @@ public final class MCPServer {
     static func log(_ message: String) {
         FileHandle.standardError.write(Data("whiteprint-mcp: \(message)\n".utf8))
     }
+}
+
+/// An MCP prompt with one optional or required argument, appended to its text
+/// as a `Label: value` line.
+private struct MCPPrompt {
+    struct Argument {
+        let name: String
+        let label: String
+        let description: String
+        let required: Bool
+    }
+
+    let name: String
+    let description: String
+    let argument: Argument
+    let text: String
+
+    var json: [String: Any] {
+        let argument: [String: Any] = [
+            "name": self.argument.name, "description": self.argument.description, "required": self.argument.required,
+        ]
+        return ["name": name, "description": description, "arguments": [argument]]
+    }
+}
+
+private extension MCPServer {
+    static let prompts = [
+        MCPPrompt(name: "study_plan", description: "Build a study plan from imported course material.",
+                  argument: .init(name: "imports", label: "Imports", description: "Import ids, comma-separated (default: all)",
+                                  required: false),
+                  text: WhiteprintText.studyPlanPrompt),
+        MCPPrompt(name: "flashcards", description: "Make flashcards from a note or an import.",
+                  argument: .init(name: "source", label: "Source", description: "A note or import id, e.g. n3 or i2",
+                                  required: true),
+                  text: WhiteprintText.flashcardsPrompt),
+    ]
 }
 
 private struct RPCError: Error {

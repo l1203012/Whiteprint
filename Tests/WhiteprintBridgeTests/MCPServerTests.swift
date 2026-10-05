@@ -121,19 +121,35 @@ final class MCPServerTests: XCTestCase {
 
     func testPrompts() throws {
         let list = try XCTUnwrap(try result("prompts/list")["prompts"] as? [[String: Any]])
-        XCTAssertEqual(list.map { $0["name"] as? String }, ["study_plan"])
+        XCTAssertEqual(list.map { $0["name"] as? String }, ["study_plan", "flashcards"])
         let arguments = try XCTUnwrap(list[0]["arguments"] as? [[String: Any]])
         XCTAssertEqual(arguments[0]["name"] as? String, "imports")
         XCTAssertEqual(arguments[0]["required"] as? Bool, false)
+        let source = try XCTUnwrap((list[1]["arguments"] as? [[String: Any]])?.first)
+        XCTAssertEqual(source["name"] as? String, "source")
+        XCTAssertEqual(source["required"] as? Bool, true)
 
         XCTAssertEqual(try promptText([:]), WhiteprintText.studyPlanPrompt)
         XCTAssertEqual(try promptText(["imports": "i1, i2"]), WhiteprintText.studyPlanPrompt + "\n\nImports: i1, i2")
+        XCTAssertEqual(try promptText(["source": "n3"], name: "flashcards"), WhiteprintText.flashcardsPrompt + "\n\nSource: n3")
+        XCTAssertEqual(errorCode(try call("prompts/get", ["name": "flashcards", "arguments": [:]])), -32602)
         XCTAssertEqual(errorCode(try call("prompts/get", ["name": "other"])), -32602)
         XCTAssertEqual(errorCode(try call("prompts/get", [:])), -32602)
     }
 
-    private func promptText(_ arguments: [String: Any]) throws -> String? {
-        let r = try result("prompts/get", ["name": "study_plan", "arguments": arguments])
+    func testPromptsAreCompact() {
+        XCTAssertLessThan(WhiteprintText.studyPlanPrompt.utf8.count, 2200)
+        XCTAssertLessThan(WhiteprintText.flashcardsPrompt.utf8.count, 900)
+        for tool in ["list_imports", "read_chunk", "save_points", "get_points", "build_study_plan"] {
+            XCTAssertTrue(WhiteprintText.studyPlanPrompt.contains(tool), tool)
+        }
+        for tool in ["read_note", "read_chunk", "get_points", "create_flashcards"] {
+            XCTAssertTrue(WhiteprintText.flashcardsPrompt.contains(tool), tool)
+        }
+    }
+
+    private func promptText(_ arguments: [String: Any], name: String = "study_plan") throws -> String? {
+        let r = try result("prompts/get", ["name": name, "arguments": arguments])
         let messages = try XCTUnwrap(r["messages"] as? [[String: Any]])
         XCTAssertEqual(messages.count, 1)
         XCTAssertEqual(messages[0]["role"] as? String, "user")

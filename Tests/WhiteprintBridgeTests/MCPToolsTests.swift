@@ -52,11 +52,29 @@ final class MCPToolsTests: XCTestCase {
 
     // MARK: tools/list
 
-    func testListsExactlyTheFourteenTools() throws {
+    func testListsExactlyTheFifteenTools() throws {
         XCTAssertEqual(try toolList().compactMap { $0["name"] as? String }, [
             "list_notes", "read_note", "create_note", "write", "draw", "edit_drawing", "delete_drawing", "add_page",
             "import_document", "list_imports", "read_chunk", "save_points", "get_points", "build_study_plan",
+            "create_flashcards",
         ])
+    }
+
+    func testToolListMatchesTheCatalog() throws {
+        let listed = try toolList()
+        let catalog = MCPToolCatalog.tools
+        XCTAssertEqual(listed.count, catalog.count)
+        for (json, tool) in zip(listed, catalog) {
+            XCTAssertEqual(json["name"] as? String, tool.name)
+            XCTAssertEqual(json["description"] as? String, tool.description)
+            XCTAssertEqual(json["annotations"] as? [String: Bool], tool.annotations)
+            XCTAssertTrue(NSDictionary(dictionary: json["inputSchema"] as? [String: Any] ?? [:]).isEqual(to: tool.inputSchema), tool.name)
+        }
+    }
+
+    func testToolListSize() throws {
+        let reply = try XCTUnwrap(server.handle(line: #"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#))
+        XCTAssertLessThan(reply.utf8.count, 6000)
     }
 
     func testSchemasAreWellFormed() throws {
@@ -99,7 +117,7 @@ final class MCPToolsTests: XCTestCase {
         for name in ["write", "edit_drawing", "delete_drawing"] {
             XCTAssertEqual(hints[name], ["destructiveHint": true], name)
         }
-        for name in ["create_note", "draw", "add_page", "import_document", "save_points", "build_study_plan"] {
+        for name in ["create_note", "draw", "add_page", "import_document", "save_points", "build_study_plan", "create_flashcards"] {
             XCTAssertEqual(hints[name], ["destructiveHint": false], name)
         }
     }
@@ -178,6 +196,82 @@ final class MCPToolsTests: XCTestCase {
                        .buildStudyPlan(importIDs: [], plan: StudyPlan(title: "T", overview: "O", modules: [])))
     }
 
+    func testCreateNoteInFolder() throws {
+        XCTAssertEqual(try request("create_note", ["title": "T", "folder": "Courses/Networks"]),
+                       .createNote(title: "T", markdown: nil, folder: "Courses/Networks"))
+        XCTAssertEqual(try request("create_note", ["title": "T", "folder": " Courses/ "]),
+                       .createNote(title: "T", markdown: nil, folder: "Courses"))
+        XCTAssertEqual(try request("create_note", ["title": "T", "folder": ""]), .createNote(title: "T", markdown: nil, folder: nil))
+        for folder in ["/Users/x", "~/Notes", "../Secrets", "a/../../b"] {
+            XCTAssertEqual(try invalid("create_note", ["title": "T", "folder": folder]),
+                           "Invalid arguments: folder: use a path inside the notes folder, e.g. Courses/Networks", folder)
+        }
+    }
+
+    func testCreateFlashcards() throws {
+        let cards: [[String: Any]] = [
+            ["question": "What does TCP guarantee?", "answer": "Ordered, reliable delivery.", "ref": "L3.pptx · slide 4"],
+            ["question": "UDP?", "answer": "Datagrams."],
+        ]
+        let expected = [
+            Flashcard(question: "What does TCP guarantee?", answer: "Ordered, reliable delivery.", ref: "L3.pptx · slide 4"),
+            Flashcard(question: "UDP?", answer: "Datagrams."),
+        ]
+        XCTAssertEqual(try request("create_flashcards", ["title": "TCP", "cards": cards]),
+                       .createFlashcards(note: nil, page: nil, title: "TCP", cards: expected))
+        XCTAssertEqual(try request("create_flashcards", ["note": "n4", "page": "2", "title": "TCP", "cards": cards]),
+                       .createFlashcards(note: "n4", page: 2, title: "TCP", cards: expected))
+        XCTAssertEqual(try invalid("create_flashcards", ["title": "TCP", "cards": []]),
+                       "Invalid arguments: cards: add at least one card")
+        XCTAssertEqual(try invalid("create_flashcards", ["title": "TCP", "cards": [["question": "Q"]]]),
+                       "Invalid arguments: cards[0].answer: required")
+        XCTAssertEqual(try invalid("create_flashcards", ["cards": cards]), "Invalid arguments: title: required")
+    }
+
+    func testStudyPlanFlashcards() throws {
+        let plan: [String: Any] = [
+            "title": "T", "overview": "O", "modules": [],
+            "flashcards": [["question": "Q", "answer": "A", "ref": "p. 1"], ["question": "Q2", "answer": "A2"]],
+        ]
+        XCTAssertEqual(try request("build_study_plan", ["imports": ["i1"], "plan": plan]), .buildStudyPlan(
+            importIDs: ["i1"],
+            plan: StudyPlan(title: "T", overview: "O", modules: [],
+                            flashcards: [Flashcard(question: "Q", answer: "A", ref: "p. 1"), Flashcard(question: "Q2", answer: "A2")])))
+        XCTAssertEqual(try invalid("build_study_plan", ["imports": [], "plan": [
+            "title": "T", "overview": "O", "modules": [], "flashcards": [["question": "Q"]],
+        ]]), "Invalid arguments: plan.flashcards[0].answer: required")
+    }
+
+    // MARK: catalog
+
+    func testCatalogMapsLikeToolsCall() throws {
+        let calls: [(String, [String: Any])] = [
+            ("list_notes", [:]), ("read_note", ["note": "n1", "page": 2]), ("create_note", ["title": "T", "folder": "A"]),
+            ("write", ["note": "n1", "page": 1, "markdown": "x", "mode": "replace"]),
+            ("draw", ["note": "n1", "page": 1, "dsl": "box a"]), ("edit_drawing", ["note": "n1", "drawing": "d1", "dsl": "x"]),
+            ("delete_drawing", ["note": "n1", "drawing": "d1"]), ("add_page", ["note": "n1"]),
+            ("import_document", ["path": "/tmp/a.pdf"]), ("list_imports", [:]), ("read_chunk", ["import": "i1", "chunk": 1]),
+            ("save_points", ["import": "i1", "chunk": 1, "points": []]), ("get_points", ["import": "i1"]),
+            ("build_study_plan", ["imports": [], "plan": ["title": "T", "overview": "O", "modules": []]]),
+            ("create_flashcards", ["title": "T", "cards": [["question": "Q", "answer": "A"]]]),
+        ]
+        XCTAssertEqual(calls.map(\.0), MCPToolCatalog.tools.map(\.name))
+        for (name, arguments) in calls {
+            let viaServer = try request(name, arguments)
+            XCTAssertEqual(try MCPToolCatalog.request(forTool: name, arguments: arguments), viaServer, name)
+        }
+    }
+
+    func testCatalogErrorsAreOneLine() {
+        XCTAssertThrowsError(try MCPToolCatalog.request(forTool: "nope", arguments: [:])) { error in
+            XCTAssertEqual(error as? ToolCallError, .unknownTool("nope"))
+            XCTAssertEqual("\(error)", "unknown tool: nope")
+        }
+        XCTAssertThrowsError(try MCPToolCatalog.request(forTool: "read_chunk", arguments: ["import": "i1", "chunk": "x"])) { error in
+            XCTAssertEqual("\(error)", "Invalid arguments: chunk: expected an integer")
+        }
+    }
+
     func testLenientIntegersAndNulls() throws {
         XCTAssertEqual(try request("read_note", ["note": "n1", "page": "2"]), .readNote(note: "n1", page: 2))
         XCTAssertEqual(try request("read_note", ["note": "n1", "page": 2.0]), .readNote(note: "n1", page: 2))
@@ -195,7 +289,7 @@ final class MCPToolsTests: XCTestCase {
                        "Invalid arguments: mode: expected one of append, replace")
         XCTAssertEqual(try invalid("write", ["note": "n1", "page": 1, "markdown": "x"]), "Invalid arguments: mode: required")
         XCTAssertEqual(try invalid("create_note", ["title": "T", "md": "x"]),
-                       "Invalid arguments: md: unknown argument (expected title, markdown)")
+                       "Invalid arguments: md: unknown argument (expected title, markdown, folder)")
         XCTAssertEqual(try invalid("list_notes", [1, 2]), "Invalid arguments: expected an object")
         XCTAssertEqual(try invalid("save_points", ["import": "i1", "chunk": 1, "points": "x"]),
                        "Invalid arguments: points: expected an array")

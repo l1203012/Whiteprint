@@ -107,28 +107,53 @@ public enum BridgePaths {
     }
 }
 
-// CONTRACT (owner: backend agent): the MCP tool catalog, shared with in-app
-// agents (the Grok runner) so they offer Claude's exact tools.
+/// One Whiteprint tool as offered to a model: in MCP `tools/list`, and to
+/// in-app agents (the Grok runner) so they get Claude's exact tools.
 public struct AgentTool {
     public var name: String
     public var description: String
     /// JSON Schema object, as sent in MCP `tools/list`.
     public var inputSchema: [String: Any]
+    /// MCP hints such as `readOnlyHint`; not part of other APIs' tool formats.
+    public var annotations: [String: Bool]
 
-    public init(name: String, description: String, inputSchema: [String: Any]) {
+    public init(name: String, description: String, inputSchema: [String: Any], annotations: [String: Bool] = [:]) {
         self.name = name
         self.description = description
         self.inputSchema = inputSchema
+        self.annotations = annotations
     }
 }
 
+/// Why a tool call couldn't become a request. The description is one line,
+/// meant to be shown to the model as the tool result.
+public enum ToolCallError: Error, Equatable, CustomStringConvertible {
+    case unknownTool(String)
+    /// E.g. `points[0].ref: required`.
+    case invalidArguments(String)
+
+    public var description: String {
+        switch self {
+        case .unknownTool(let name): return "unknown tool: \(name)"
+        case .invalidArguments(let problem): return "Invalid arguments: \(problem)"
+        }
+    }
+}
+
+/// The single source of truth for Whiteprint's tools: what `tools/list`
+/// serves and how `tools/call` validates arguments.
 public enum MCPToolCatalog {
     /// Every Whiteprint tool, in `tools/list` order.
-    public static var tools: [AgentTool] { [] }
+    public static var tools: [AgentTool] { MCPTool.all.map(\.agentTool) }
 
     /// Validates `arguments` (a decoded JSON object) for tool `name` and maps
-    /// them to a request. Throws an error whose description is one actionable line.
+    /// them to a request. Throws a `ToolCallError`.
     public static func request(forTool name: String, arguments: [String: Any]) throws -> BridgeRequest {
-        throw BridgeError.badReply("unknown tool \(name)")
+        guard let tool = MCPTool.named(name) else { throw ToolCallError.unknownTool(name) }
+        do {
+            return try tool.makeRequest(arguments)
+        } catch {
+            throw ToolCallError.invalidArguments("\(error)")
+        }
     }
 }

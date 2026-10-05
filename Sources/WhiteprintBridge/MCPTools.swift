@@ -3,6 +3,7 @@ import WhiteprintCore
 
 /// One MCP tool: what Claude sees in `tools/list`, and how its arguments become
 /// a `BridgeRequest`. Descriptions are sent on every turn, so they stay terse.
+/// Published through `MCPToolCatalog`.
 struct MCPTool {
     enum Effect {
         case readOnly, additive, destructive
@@ -14,14 +15,14 @@ struct MCPTool {
     let effect: Effect
     let request: (ToolArguments) throws -> BridgeRequest
 
-    var json: [String: Any] {
-        let hint: [String: Any]
+    var agentTool: AgentTool {
+        let hints: [String: Bool]
         switch effect {
-        case .readOnly: hint = ["readOnlyHint": true]
-        case .additive: hint = ["destructiveHint": false]
-        case .destructive: hint = ["destructiveHint": true]
+        case .readOnly: hints = ["readOnlyHint": true]
+        case .additive: hints = ["destructiveHint": false]
+        case .destructive: hints = ["destructiveHint": true]
         }
-        return ["name": name, "description": description, "inputSchema": ToolSchema.object(arguments).json, "annotations": hint]
+        return AgentTool(name: name, description: description, inputSchema: ToolSchema.object(arguments).json, annotations: hints)
     }
 
     /// Validates raw `arguments` and maps them to the request for the app.
@@ -53,13 +54,20 @@ struct ToolArguments {
         values[key] as? Int
     }
 
-    /// Decodes a validated object or array into a core model type.
-    func decode<T: Decodable>(_ type: T.Type, _ key: String, defaults: [String: Any] = [:]) throws -> T {
-        var value = values[key] ?? NSNull()
-        if var object = value as? [String: Any] {
-            object.merge(defaults) { current, _ in current }
-            value = object
+    /// A folder relative to the notes folder, with surrounding slashes trimmed.
+    /// Nil when absent or empty; absolute paths and `..` are refused.
+    func folder(_ key: String) throws -> String? {
+        guard let raw = optionalString(key) else { return nil }
+        let path = raw.trimmingCharacters(in: CharacterSet(charactersIn: "/").union(.whitespaces))
+        guard !raw.hasPrefix("/"), !raw.hasPrefix("~"), !path.split(separator: "/").contains("..") else {
+            throw ArgumentError(key, "use a path inside the notes folder, e.g. Courses/Networks")
         }
+        return path.isEmpty ? nil : path
+    }
+
+    /// Decodes a validated object or array into a core model type.
+    func decode<T: Decodable>(_ type: T.Type, _ key: String) throws -> T {
+        let value = values[key] ?? NSNull()
         do {
             let data = try JSONSerialization.data(withJSONObject: value)
             return try JSONDecoder().decode(type, from: data)
@@ -77,6 +85,12 @@ extension MCPTool {
         .optional("topic", .string),
     ])
 
+    private static let card = ToolSchema.object([
+        .required("question", .string),
+        .required("answer", .string),
+        .optional("ref", .string),
+    ])
+
     private static let plan = ToolSchema.object([
         .required("title", .string),
         .required("overview", .string),
@@ -91,6 +105,7 @@ extension MCPTool {
             .optional("ref", .string),
         ]))),
         .optional("diagrams", .array(.string)),
+        .optional("flashcards", .array(card)),
     ])
 
     static let all: [MCPTool] = [
@@ -100,9 +115,10 @@ extension MCPTool {
                 arguments: [.required("note", .string), .optional("page", .integer)], effect: .readOnly) {
             .readNote(note: try $0.string("note"), page: $0.optionalInt("page"))
         },
-        MCPTool(name: "create_note", description: "Create a note. Returns its id.",
-                arguments: [.required("title", .string), .optional("markdown", .string)], effect: .additive) {
-            .createNote(title: try $0.string("title"), markdown: $0.optionalString("markdown"), folder: nil)
+        MCPTool(name: "create_note", description: "Create a note, optionally in a folder (e.g. Courses/Networks). Returns its id.",
+                arguments: [.required("title", .string), .optional("markdown", .string), .optional("folder", .string)],
+                effect: .additive) {
+            .createNote(title: try $0.string("title"), markdown: $0.optionalString("markdown"), folder: try $0.folder("folder"))
         },
         MCPTool(name: "write", description: "Append to or replace a page's markdown.",
                 arguments: [
@@ -156,7 +172,17 @@ extension MCPTool {
         MCPTool(name: "build_study_plan", description: "Write the final study plan as a new note. Returns its id.",
                 arguments: [.required("imports", .array(.string)), .required("plan", plan)], effect: .additive) {
             .buildStudyPlan(importIDs: try $0.decode([String].self, "imports"),
-                            plan: try $0.decode(StudyPlan.self, "plan", defaults: ["tasks": [Any](), "diagrams": [Any]()]))
+                            plan: try $0.decode(StudyPlan.self, "plan"))
+        },
+        MCPTool(name: "create_flashcards", description: "Add a flashcard deck to a note's page (default: last), or to a new note. Returns ids.",
+                arguments: [
+                    .optional("note", .string), .optional("page", .integer), .required("title", .string),
+                    .required("cards", .array(card)),
+                ], effect: .additive) {
+            let cards = try $0.decode([Flashcard].self, "cards")
+            guard !cards.isEmpty else { throw ArgumentError("cards", "add at least one card") }
+            return .createFlashcards(note: $0.optionalString("note"), page: $0.optionalInt("page"),
+                                     title: try $0.string("title"), cards: cards)
         },
     ]
 
