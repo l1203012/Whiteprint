@@ -47,8 +47,6 @@ public struct ClaudeStreamParser {
 }
 
 private extension ClaudeStreamParser {
-    static let toolPrefix = "mcp__whiteprint__"
-
     mutating func system(_ message: [String: Any]) -> [Event] {
         guard message["subtype"] as? String == "init" else { return [] }
         let servers = message["mcp_servers"] as? [[String: Any]] ?? []
@@ -69,32 +67,12 @@ private extension ClaudeStreamParser {
                 let text = (block["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                 return text.isEmpty ? nil : .text(text)
             case "tool_use":
-                return .status(status(tool: block["name"] as? String ?? "", input: block["input"] as? [String: Any] ?? [:]))
+                return .status(ToolStatus.text(tool: block["name"] as? String ?? "", input: block["input"] as? [String: Any] ?? [:],
+                                               importInfo: importInfo))
             default:
                 return nil
             }
         }
-    }
-
-    func status(tool: String, input: [String: Any]) -> String {
-        let name = tool.hasPrefix(Self.toolPrefix) ? String(tool.dropFirst(Self.toolPrefix.count)) : tool
-        switch name {
-        case "list_imports": return "Looking at your imports…"
-        case "read_chunk": return readingStatus(input)
-        case "save_points": return "Saving points…"
-        case "get_points": return "Merging the points…"
-        case "build_study_plan": return "Building the study plan…"
-        case "ReadMcpResourceTool", "ListMcpResourcesTool": return "Reading the drawing reference…"
-        default: return "Working…"
-        }
-    }
-
-    func readingStatus(_ input: [String: Any]) -> String {
-        let id = (input["import"] ?? input["importID"] ?? input["id"]) as? String
-        let n = (input["n"] ?? input["chunk"]) as? Int
-        guard let id, let n else { return "Reading…" }
-        guard let info = importInfo(id) else { return "Reading chunk \(n) · \(id)" }
-        return "Reading chunk \(n) of \(info.chunkCount) · \(info.name)"
     }
 
     mutating func result(_ message: [String: Any]) -> Event {
