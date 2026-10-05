@@ -5,8 +5,23 @@ import WhiteprintCore
 @testable import WhiteprintRender
 
 final class PDFExporterTests: XCTestCase {
+    private let date = Date(timeIntervalSince1970: 1_790_000_000)
+
     private func document(_ note: Note, style: PDFExportStyle = .blueprint) throws -> PDFDocument {
-        try XCTUnwrap(PDFDocument(data: PDFExporter.data(for: note, style: style)))
+        try XCTUnwrap(PDFDocument(data: PDFExporter.data(for: note, style: style, date: date)))
+    }
+
+    private func render(_ page: PDFPage) -> Bitmap {
+        let bounds = page.bounds(for: .mediaBox)
+        let bitmap = Bitmap(width: Int(bounds.width), height: Int(bounds.height))
+        bitmap.withGraphicsContext {
+            bitmap.context.saveGState()
+            bitmap.context.translateBy(x: 0, y: bounds.height)
+            bitmap.context.scaleBy(x: 1, y: -1)
+            page.draw(with: .mediaBox, to: bitmap.context)
+            bitmap.context.restoreGState()
+        }
+        return bitmap
     }
 
     private func longText(lines: Int) -> String {
@@ -34,7 +49,8 @@ final class PDFExporterTests: XCTestCase {
             NotePage(blocks: [.text("# First\nshort")]),
             NotePage(blocks: [.text("# Second\nshort")]),
         ])
-        let pdf = try document(note)
+        // Print pages, since blueprint pages repeat the title in their title block.
+        let pdf = try document(note, style: .print)
         XCTAssertEqual(pdf.pageCount, 2)
         // PDFKit's extracted text may start with a space.
         let text = { (i: Int) in pdf.page(at: i)?.string?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "" }
@@ -77,25 +93,124 @@ final class PDFExporterTests: XCTestCase {
 
     func testTitleIsNotRepeatedWhenThePageStartsWithIt() throws {
         let note = Note(title: "Plan", pages: [NotePage(blocks: [.text("# Plan\nbody")])])
-        let text = try XCTUnwrap(try document(note).page(at: 0)?.string)
+        let text = try XCTUnwrap(try document(note, style: .print).page(at: 0)?.string)
         XCTAssertEqual(text.components(separatedBy: "Plan").count, 2)
     }
 
     func testStylesPaintTheirPaper() throws {
-        for (style, background) in [(PDFExportStyle.blueprint, BlueprintPalette.blueprint.pageBackground), (.print, .white)] {
-            let page = try XCTUnwrap(try document(Note(title: "T"), style: style).page(at: 0))
-            let bounds = page.bounds(for: .mediaBox)
-            let bitmap = Bitmap(width: Int(bounds.width), height: Int(bounds.height))
-            bitmap.withGraphicsContext {
-                bitmap.context.saveGState()
-                bitmap.context.translateBy(x: 0, y: bounds.height)
-                bitmap.context.scaleBy(x: 1, y: -1)
-                page.draw(with: .mediaBox, to: bitmap.context)
-                bitmap.context.restoreGState()
-            }
-            XCTAssertTrue(bitmap.pixel(5, 5, matches: background, tolerance: 16), "\(style) paper")
-            XCTAssertTrue(bitmap.pixel(Int(bounds.width) - 5, Int(bounds.height) - 5, matches: background, tolerance: 16))
+        let blueprint = render(try XCTUnwrap(try document(Note(title: "T")).page(at: 0)))
+        let print = render(try XCTUnwrap(try document(Note(title: "T"), style: .print).page(at: 0)))
+        let middle = blueprint.height / 2
+        XCTAssertTrue(blueprint.pixel(10, middle, matches: BlueprintPalette.blueprint.pageBackground, tolerance: 16))
+        let corner = blueprint.pixel(blueprint.width - 3, blueprint.height - 3)
+        XCTAssertGreaterThan(corner.b, corner.r + 40, "vignetted corners stay blue")
+        XCTAssertTrue(print.pixel(5, 5, matches: .white, tolerance: 4))
+        XCTAssertTrue(print.pixel(print.width - 5, print.height - 5, matches: .white, tolerance: 4))
+    }
+
+    func testBlueprintPagesHaveATitleBlockAndPrintPagesANumber() throws {
+        let note = Note(title: "Survey", pages: [NotePage(blocks: [.text("one")]), NotePage(blocks: [.text("two")])])
+        let blueprint = try document(note)
+        let last = try XCTUnwrap(blueprint.page(at: 1)?.string)
+        XCTAssertTrue(last.contains("Survey"))
+        XCTAssertTrue(last.contains("2/2"), "page n / N, read out without spaces")
+        XCTAssertTrue(last.contains("2026-09-21"))
+        XCTAssertTrue(last.contains("WHITEPRINT"))
+        let print = try XCTUnwrap(try document(note, style: .print).page(at: 1)?.string)
+        XCTAssertFalse(print.contains("WHITEPRINT"))
+        XCTAssertTrue(print.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("2"))
+    }
+
+    /// Viewers split copied text into fragments when hundreds of stroked
+    /// lines sit under it, which the grid pattern avoids.
+    func testBodyTextCopiesOutWhole() throws {
+        let sentence = "The deck carries a uniform load of four kilonewtons per metre over the full span"
+        let note = Note(title: "Copy", pages: [NotePage(blocks: [.text("\(sentence).\n\n" + longText(lines: 10))])])
+        let page = try XCTUnwrap(try document(note).page(at: 0))
+        let text = try XCTUnwrap(page.string)
+        XCTAssertTrue(text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("Copy"), "page text comes before the title block")
+        let selected = try XCTUnwrap(page.selection(for: page.bounds(for: .mediaBox))?.string)
+        XCTAssertTrue(selected.replacingOccurrences(of: "\n", with: " ").contains(sentence))
+        for line in 1...10 {
+            XCTAssertTrue(selected.contains("item \(line) with a few words in it"), "item \(line)")
         }
+    }
+
+    func testBlueprintPagesStaySmall() throws {
+        let note = { (pages: Int) in
+            Note(title: "Size", pages: (1...pages).map { NotePage(blocks: [.text("# Page \($0)\nsome words")]) })
+        }
+        let one = PDFExporter.data(for: note(1), style: .blueprint, date: date).count
+        let ten = PDFExporter.data(for: note(10), style: .blueprint, date: date).count
+        XCTAssertLessThan(one, 60_000)
+        XCTAssertLessThan((ten - one) / 9, 6_000, "bytes per extra page")
+    }
+}
+
+final class BlueprintBackgroundTests: XCTestCase {
+    private let size = CGSize(width: 200, height: 200)
+
+    private func render(_ options: BlueprintBackground.Options, palette: BlueprintPalette = .blueprint) -> Bitmap {
+        let bitmap = Bitmap(width: Int(size.width), height: Int(size.height))
+        bitmap.withGraphicsContext {
+            BlueprintBackground.draw(in: bitmap.context, rect: CGRect(origin: .zero, size: size), palette: palette, options: options)
+        }
+        return bitmap
+    }
+
+    private func brightness(_ pixel: (r: Int, g: Int, b: Int, a: Int)) -> Int {
+        pixel.r + pixel.g + pixel.b
+    }
+
+    func testPlainIsThePageColour() {
+        let bitmap = render(.plain)
+        let background = BlueprintPalette.blueprint.pageBackground
+        XCTAssertEqual(bitmap.count(matching: background, tolerance: 1), Int(size.width * size.height))
+    }
+
+    func testGridHasMinorAndMajorLines() {
+        let bitmap = render(.init(gradient: false, texture: false))
+        let paper = brightness(bitmap.pixel(55, 55))
+        let minor = brightness(bitmap.pixel(60, 55))
+        let major = brightness(bitmap.pixel(50, 55))
+        XCTAssertGreaterThan(minor, paper)
+        XCTAssertGreaterThan(major, minor)
+        XCTAssertEqual(brightness(bitmap.pixel(150, 155)), major, "every 50 pt")
+    }
+
+    func testTextureIsDeterministicAndFaint() throws {
+        XCTAssertEqual(try XCTUnwrap(PaperTexture.tile).width, PaperTexture.pixels)
+        XCTAssertEqual(PaperTexture.coverage(seed: 7, size: 64), PaperTexture.coverage(seed: 7, size: 64))
+        XCTAssertNotEqual(PaperTexture.coverage(seed: 7, size: 64), PaperTexture.coverage(seed: 8, size: 64))
+
+        let bitmap = render(.init(gradient: false, grid: false))
+        let background = BlueprintPalette.blueprint.pageBackground
+        let total = Int(size.width * size.height)
+        XCTAssertLessThan(bitmap.count(matching: background, tolerance: 1), total, "some texture")
+        XCTAssertEqual(bitmap.count(matching: background, tolerance: 40), total, "but faint")
+    }
+
+    func testTitleBlockSitsInTheBottomRightCorner() {
+        let sheet = CGSize(width: 400, height: 300)
+        let bitmap = Bitmap(width: Int(sheet.width), height: Int(sheet.height))
+        let block = BlueprintBackground.TitleBlock(title: "Survey", page: 1, pageCount: 3, date: Date())
+        bitmap.withGraphicsContext {
+            BlueprintBackground.draw(in: bitmap.context, rect: CGRect(origin: .zero, size: sheet), palette: .blueprint,
+                                     options: .init(gradient: false, texture: false, grid: false, titleBlock: block))
+        }
+        let blockRect = CGRect(
+            x: sheet.width - BlueprintBackground.frameInset - BlueprintBackground.titleBlockSize.width,
+            y: sheet.height - BlueprintBackground.frameInset - BlueprintBackground.titleBlockSize.height,
+            width: BlueprintBackground.titleBlockSize.width, height: BlueprintBackground.titleBlockSize.height
+        ).insetBy(dx: 2, dy: 2)
+        var ink = 0
+        for y in Int(blockRect.minY)..<Int(blockRect.maxY) {
+            for x in Int(blockRect.minX)..<Int(blockRect.maxX) where bitmap.pixel(x, y, matches: .white, tolerance: 60) {
+                ink += 1
+            }
+        }
+        XCTAssertGreaterThan(ink, 100)
+        XCTAssertTrue(bitmap.pixel(Int(blockRect.minX) - 20, Int(blockRect.midY), matches: BlueprintPalette.blueprint.pageBackground, tolerance: 2))
     }
 }
 
