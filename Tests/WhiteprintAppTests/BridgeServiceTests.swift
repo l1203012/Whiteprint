@@ -135,6 +135,16 @@ final class BridgeServiceTests: XCTestCase {
         XCTAssertEqual(try workspace.note(at: url).drawings.map(\.id), ["d1", "d2"])
     }
 
+    func testDrawingWhereNothingCompilesIsNotSaved() async throws {
+        let url = try workspace.add("A.wprint", "```wp id=d1\nbox a\n```")
+        let id = try await listedID("A")
+        let draw = await send(.draw(note: id, page: 1, dsl: "flow a>", after: nil))
+        XCTAssertEqual(draw, .failure("nothing to draw, not saved:\nline 1: bad link 'a>', use a>b"))
+        let edit = await send(.editDrawing(note: id, drawing: "d1", dsl: "squiggle"))
+        XCTAssertEqual(edit, .failure("nothing to draw, not saved:\nline 1: unknown command 'squiggle'"))
+        XCTAssertEqual(try workspace.note(at: url).drawings, [Drawing(id: "d1", source: "box a")])
+    }
+
     func testEditAndDeleteDrawing() async throws {
         let url = try workspace.add("A.wprint", "```wp id=d1\nbox a\n```")
         let id = try await listedID("A")

@@ -25,6 +25,8 @@ enum WorkspaceError: Error, CustomStringConvertible {
     case fileNotFound(String)
     case unsupportedFile(String)
     case studyUnavailable
+    /// Drawing source in which nothing compiled; carries the compile errors.
+    case nothingDrawn([String])
 
     var description: String {
         switch self {
@@ -33,6 +35,7 @@ enum WorkspaceError: Error, CustomStringConvertible {
         case .fileNotFound(let path): return "no file at \(path)"
         case .unsupportedFile(let name): return "\(name): unsupported file type (use PDF, DOCX, DOC or PPTX)"
         case .studyUnavailable: return "the study store couldn't be opened"
+        case .nothingDrawn(let errors): return (["nothing to draw, not saved:"] + errors).joined(separator: "\n")
         }
     }
 }

@@ -77,12 +77,14 @@ final class BridgeService: BridgeHandler {
             return "ok"
 
         case let .draw(id, page, dsl, after):
+            try Self.rejectIfNothingDrawn(dsl)
             let drawingID = try workspace.edit(noteAt: url(for: id), actionName: "Claude’s Drawing") { note in
                 try note.insertDrawing(dsl, page: page, after: after)
             }
             return Self.withCompileErrors("ok \(drawingID)", dsl)
 
         case let .editDrawing(id, drawing, dsl):
+            try Self.rejectIfNothingDrawn(dsl)
             try workspace.edit(noteAt: url(for: id), actionName: "Claude’s Drawing") { note in
                 try note.updateDrawing(drawing, source: dsl)
             }
@@ -108,6 +110,15 @@ final class BridgeService: BridgeHandler {
     private func url(for id: String) throws -> URL {
         guard let url = registry.url(for: id) else { throw WorkspaceError.unknownNote(id) }
         return url
+    }
+
+    /// Refuses source where every statement failed, so a typo can't replace
+    /// a drawing with an empty one. Partly valid source is saved and its
+    /// errors are reported.
+    private static func rejectIfNothingDrawn(_ dsl: String) throws {
+        let compiled = DrawingCompiler.compile(dsl)
+        guard !compiled.errors.isEmpty, compiled.scene == DrawingScene() else { return }
+        throw WorkspaceError.nothingDrawn(compiled.errors.map(\.description))
     }
 
     /// `ok d3` followed by one `line N: …` per compile error.
