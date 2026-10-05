@@ -220,6 +220,8 @@ enum MarkdownEditing {
         case text(TextChange)
         /// Remove the typed command, then insert a drawing at the caret.
         case insertDrawing(TextChange)
+        /// Remove the typed command, then insert a flashcard deck at the caret.
+        case insertDeck(TextChange)
         /// Remove the typed command, then add a page after this one.
         case newPage(TextChange)
     }
@@ -270,6 +272,7 @@ enum MarkdownEditing {
             return .text(TextChange(range: line.range, replacement: replacement,
                                     selection: NSRange(location: line.start + (replacement as NSString).length, length: 0)))
         case .drawing: return .insertDrawing(removal)
+        case .flashcards: return .insertDeck(removal)
         case .newPage: return .newPage(removal)
         }
     }

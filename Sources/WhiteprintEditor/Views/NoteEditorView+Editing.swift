@@ -12,7 +12,8 @@ extension NoteEditorView: BlockTextViewDelegate {
         isPerformingChange = true
         if view.shouldChangeText(in: change.range, replacementString: change.replacement) {
             view.textStorage?.replaceCharacters(
-                in: change.range, with: NSAttributedString(string: change.replacement, attributes: TextStyle.base(palette)))
+                in: change.range,
+                with: NSAttributedString(string: change.replacement, attributes: TextStyle.base(palette, fontSize: view.fontSize)))
             view.didChangeText()
         }
         isPerformingChange = false
@@ -100,16 +101,20 @@ extension NoteEditorView: BlockTextViewDelegate {
         }
     }
 
+    func blockTextViewTouchBar(_ view: BlockTextView) -> NSTouchBar? {
+        touchBarProvider.makeTouchBar()
+    }
+
     // MARK: Moving between blocks
 
     /// Moves the focus to the previous or next block. A text block gets the
     /// caret at `x` on its last / first line (or at its end / start without
-    /// `x`); a drawing gets selected. Returns false at the ends of the note.
+    /// `x`); a drawing or deck gets selected. Returns false at the ends of the note.
     @discardableResult
     func moveFocus(from id: BlockID, forward: Bool, x: CGFloat?) -> Bool {
         guard let target = forward ? document.block(after: id) : document.block(before: id) else { return false }
         guard let text = target.text else {
-            focus(.drawing(target.id))
+            focus(.block(target.id))
             return true
         }
         let length = (text as NSString).length
@@ -121,15 +126,15 @@ extension NoteEditorView: BlockTextViewDelegate {
         return true
     }
 
-    /// ⌫ at the start of a text block: selects a drawing before it, joins it
+    /// ⌫ at the start of a text block: selects a drawing or deck before it, joins it
     /// onto text before it, or removes the page break before it (deleting
     /// the page if it's empty).
     func backspaceAtStart(of id: BlockID) -> Bool {
         guard let location = document.location(of: id) else { return false }
         if location.block > 0 {
             let previous = document.pages[location.page].blocks[location.block - 1]
-            if previous.drawing != nil {
-                focus(.drawing(previous.id))
+            if !previous.isText {
+                focus(.block(previous.id))
                 return true
             }
             performBlockEdit("Join Blocks") { document in
@@ -227,6 +232,9 @@ extension NoteEditorView: BlockTextViewDelegate {
         case .insertDrawing(let removal):
             perform(removal, in: view)
             insertDrawing(source: "", splitting: view.blockID, at: removal.selection.location, page: currentPageIndex)
+        case .insertDeck(let removal):
+            perform(removal, in: view)
+            insertDeck(splitting: view.blockID, at: removal.selection.location, page: currentPageIndex)
         case .newPage(let removal):
             perform(removal, in: view)
             addPage(after: document.location(of: view.blockID)?.page ?? currentPageIndex)
@@ -255,13 +263,27 @@ extension NoteEditorView: BlockTextViewDelegate {
     func insertDrawing(source: String, splitting text: BlockID?, at offset: Int?, page: Int) {
         let focus = performBlockEdit("Insert Drawing") { document in
             if let text, let offset, let id = document.insertDrawing(source: source, splitting: text, at: offset) {
-                return .drawing(id)
+                return .block(id)
             }
-            return .drawing(document.appendDrawing(source: source, toPage: page))
+            return .block(document.appendDrawing(source: source, toPage: page))
         }
-        if case .drawing(let id) = focus {
+        if case .block(let id) = focus {
             layoutSubtreeIfNeeded()
             editDrawing(id)
+        }
+    }
+
+    func insertDeck(splitting text: BlockID?, at offset: Int?, page: Int) {
+        let empty = CardDeck(cards: [])
+        let focus = performBlockEdit("Insert Flashcards") { document in
+            if let text, let offset, let id = document.insertDeck(empty, splitting: text, at: offset) {
+                return .block(id)
+            }
+            return .block(document.appendDeck(empty, toPage: page))
+        }
+        if case .block(let id) = focus {
+            layoutSubtreeIfNeeded()
+            editDeck(id)
         }
     }
 
@@ -275,7 +297,8 @@ extension NoteEditorView: BlockTextViewDelegate {
     }
 
     func deleteBlock(_ id: BlockID) {
-        performBlockEdit(document.block(id)?.drawing == nil ? "Delete Block" : "Delete Drawing") { document in
+        let name = document.block(id)?.drawing != nil ? "Delete Drawing" : document.block(id)?.deck != nil ? "Delete Flashcards" : "Delete Block"
+        performBlockEdit(name) { document in
             let before = document.block(before: id)
             let after = document.block(after: id)
             let fallback = document.removeBlock(id)
@@ -321,6 +344,10 @@ extension NoteEditorView: BlockTextViewDelegate {
         case let drawing as DrawingBlockView:
             id = drawing.blockID
             lineMid = DrawingBlockView.verticalPadding + 12
+        case let deck as DeckBlockView:
+            id = deck.blockID
+            let metrics = DeckLayout.metrics(deck.fontSize)
+            lineMid = metrics.padding + metrics.headerHeight / 2
         default:
             return
         }
@@ -334,7 +361,7 @@ extension NoteEditorView: BlockTextViewDelegate {
         guard let page = pageViews.first(where: { $0.frame.contains(point) }), page.isRealized else { return nil }
         let local = page.convert(point, from: documentView)
         guard page.sheetRect.contains(local) else { return nil }
-        let half = PageGeometry.blockSpacing / 2
+        let half = geometry.blockSpacing / 2
         guard let view = page.blockViews.first(where: { local.y >= $0.frame.minY - half && local.y < $0.frame.maxY + half }) else {
             return nil
         }
@@ -365,6 +392,11 @@ extension NoteEditorView: BlockTextViewDelegate {
             menu.addItem(.separator())
             add("Edit Drawing…", #selector(blockMenuEditDrawing(_:)))
         }
+        if let deck = document.block(id)?.deck {
+            menu.addItem(.separator())
+            add("Edit Flashcards…", #selector(blockMenuEditDeck(_:)))
+            add("Study", #selector(blockMenuStudy(_:)), enabled: !deck.cards.isEmpty)
+        }
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: handle.bounds.maxY + 4), in: handle)
     }
 
@@ -391,6 +423,41 @@ extension NoteEditorView: BlockTextViewDelegate {
     @objc private func blockMenuEditDrawing(_ item: NSMenuItem) {
         if let id = menuBlock(item) { editDrawing(id) }
     }
+
+    @objc private func blockMenuEditDeck(_ item: NSMenuItem) {
+        if let id = menuBlock(item) { editDeck(id) }
+    }
+
+    @objc private func blockMenuStudy(_ item: NSMenuItem) {
+        if let id = menuBlock(item), let deck = document.block(id)?.deck { onStudyDeck?(deck) }
+    }
+
+    // MARK: Selected drawings and decks
+
+    /// Keys on a selected drawing or deck: ⌫ deletes it, ↩ starts text after
+    /// it, space opens its editor, arrows move to the neighbouring blocks.
+    func handleKey(_ event: NSEvent, onSelected id: BlockID) -> Bool {
+        switch event.keyCode {
+        case 51, 117:
+            deleteBlock(id)
+        case 36, 76:
+            performBlockEdit("New Line") { document in
+                document.textBlock(after: id).map { .text($0, NSRange(location: 0, length: 0)) }
+            }
+            if case .block = currentFocus, let next = document.block(after: id), next.isText {
+                focus(.text(next.id, NSRange(location: 0, length: 0)))
+            }
+        case 49:
+            if document.block(id)?.deck != nil { editDeck(id) } else { editDrawing(id) }
+        case 123, 126:
+            moveFocus(from: id, forward: false, x: nil)
+        case 124, 125:
+            moveFocus(from: id, forward: true, x: nil)
+        default:
+            return false
+        }
+        return true
+    }
 }
 
 // MARK: - Drawings
@@ -401,33 +468,14 @@ extension NoteEditorView: DrawingBlockViewDelegate {
     }
 
     func drawingBlockView(_ view: DrawingBlockView, handleKey event: NSEvent) -> Bool {
-        let id = view.blockID
-        switch event.keyCode {
-        case 51, 117:
-            deleteBlock(id)
-        case 36, 76:
-            performBlockEdit("New Line") { document in
-                document.textBlock(after: id).map { .text($0, NSRange(location: 0, length: 0)) }
-            }
-            if case .drawing = currentFocus, let next = document.block(after: id), next.isText {
-                focus(.text(next.id, NSRange(location: 0, length: 0)))
-            }
-        case 49:
-            editDrawing(id)
-        case 123, 126:
-            moveFocus(from: id, forward: false, x: nil)
-        case 124, 125:
-            moveFocus(from: id, forward: true, x: nil)
-        default:
-            return false
-        }
-        return true
+        handleKey(event, onSelected: view.blockID)
     }
 
     /// Opens the source popover for a drawing (or, offscreen, just the editor).
     func editDrawing(_ id: BlockID) {
         guard let view = view(for: id) as? DrawingBlockView else { return }
         closeDrawingEditor(commit: true)
+        closeDeckEditor(commit: true)
         let editor = DrawingSourceEditor(blockID: id, source: view.source, palette: palette) { [weak self] source in
             self?.commitDrawing(id, source: source)
         }
@@ -457,6 +505,65 @@ extension NoteEditorView: DrawingBlockViewDelegate {
         guard let drawing = document.block(id)?.drawing, drawing.source != source else { return }
         performBlockEdit("Edit Drawing") { document in
             document.updateDrawing(id, source: source)
+            return nil
+        }
+    }
+}
+
+// MARK: - Flashcard decks
+
+extension NoteEditorView: DeckBlockViewDelegate {
+    func deckBlockViewRequestsEditor(_ view: DeckBlockView) {
+        editDeck(view.blockID)
+    }
+
+    func deckBlockViewRequestsStudy(_ view: DeckBlockView) {
+        if let deck = document.block(view.blockID)?.deck { onStudyDeck?(deck) }
+    }
+
+    func deckBlockView(_ view: DeckBlockView, handleKey event: NSEvent) -> Bool {
+        handleKey(event, onSelected: view.blockID)
+    }
+
+    func deckBlockViewDidChangeHeight(_ view: DeckBlockView) {
+        needsLayout = true
+    }
+
+    /// Opens the editor popover for a deck (or, offscreen, just the editor).
+    func editDeck(_ id: BlockID) {
+        guard let view = view(for: id) as? DeckBlockView, let deck = document.block(id)?.deck else { return }
+        closeDrawingEditor(commit: true)
+        closeDeckEditor(commit: true)
+        let editor = DeckEditor(blockID: id, deck: deck) { [weak self] deck in
+            self?.commitDeck(id, deck)
+        }
+        deckEditor = editor
+        guard let window, window.isVisible else { return }
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.animates = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        popover.contentViewController = editor
+        popover.delegate = editor
+        editor.popover = popover
+        popover.show(relativeTo: view.bounds, of: view, preferredEdge: .maxY)
+    }
+
+    func closeDeckEditor(commit: Bool) {
+        guard let editor = deckEditor else { return }
+        deckEditor = nil
+        if commit {
+            editor.close()
+        } else {
+            editor.discard()
+        }
+    }
+
+    /// Saves a deck's new title and cards as one undoable step.
+    func commitDeck(_ id: BlockID, _ deck: CardDeck) {
+        if deckEditor?.blockID == id { deckEditor = nil }
+        guard let old = document.block(id)?.deck, old.title != deck.title || old.cards != deck.cards else { return }
+        performBlockEdit("Edit Flashcards") { document in
+            document.updateDeck(id, deck)
             return nil
         }
     }

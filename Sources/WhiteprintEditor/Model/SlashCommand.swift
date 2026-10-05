@@ -5,7 +5,7 @@ enum SlashCommand: CaseIterable, Equatable {
     case heading1, heading2, heading3
     case bulletList, numberedList, checklist
     case quote, codeBlock, divider
-    case drawing, newPage
+    case drawing, flashcards, newPage
 
     var title: String {
         switch self {
@@ -19,6 +19,7 @@ enum SlashCommand: CaseIterable, Equatable {
         case .codeBlock: return "Code block"
         case .divider: return "Divider"
         case .drawing: return "Drawing"
+        case .flashcards: return "Flashcards"
         case .newPage: return "New page"
         }
     }
@@ -35,6 +36,7 @@ enum SlashCommand: CaseIterable, Equatable {
         case .codeBlock: return "Monospaced code"
         case .divider: return "Visually divide blocks"
         case .drawing: return "A diagram in the drawing language"
+        case .flashcards: return "A deck of question and answer cards"
         case .newPage: return "Start a new page after this one"
         }
     }
@@ -52,6 +54,7 @@ enum SlashCommand: CaseIterable, Equatable {
         case .codeBlock: return ["```", "snippet", "pre"]
         case .divider: return ["hr", "rule", "line", "---", "separator"]
         case .drawing: return ["diagram", "sketch", "wp", "draw", "chart"]
+        case .flashcards: return ["cards", "deck", "study", "quiz", "q&a"]
         case .newPage: return ["page", "break", "+++"]
         }
     }

@@ -3,8 +3,8 @@ import WhiteprintCore
 import WhiteprintRender
 
 /// The Notion-style editing surface for one note: a scrolling, centred column
-/// of blue blueprint pages with white text, inline drawings, slash menu,
-/// Markdown shortcuts and checkboxes.
+/// of blue blueprint pages with white text, inline drawings and flashcard
+/// decks, slash menu, Markdown shortcuts, checkboxes and a Touch Bar.
 ///
 /// The content lives in an `EditorDocument`; views are thin and keyed by
 /// block id. Pages near the viewport get views; the rest are estimated.
@@ -18,6 +18,32 @@ public final class NoteEditorView: NSView {
     /// Called when the page nearest the top of the viewport changes (1-based).
     public var onVisiblePageChange: ((Int) -> Void)?
 
+    /// Called when a deck's Study button is clicked.
+    public var onStudyDeck: ((CardDeck) -> Void)?
+
+    /// Slides (the default) or A4 sheets showing where printed pages break.
+    /// Switching keeps the block at the top of the viewport in place.
+    public var layoutMode: PageLayoutMode = .slides {
+        didSet {
+            guard layoutMode != oldValue else { return }
+            keepingTopBlockInPlace {
+                needsLayout = true
+                layoutSubtreeIfNeeded()
+            }
+        }
+    }
+
+    /// Whether Markdown markup shows (the default). When false, it's hidden
+    /// except in the paragraphs holding the caret or selection, so they stay
+    /// editable; the text is still raw Markdown.
+    public var showsMarkdownSyntax = true {
+        didSet {
+            guard showsMarkdownSyntax != oldValue else { return }
+            for view in textViews.values { view.concealsMarkup = !showsMarkdownSyntax }
+            needsLayout = true
+        }
+    }
+
     let palette: BlueprintPalette
     var document: EditorDocument
     let scrollView = NSScrollView()
@@ -28,7 +54,9 @@ public final class NoteEditorView: NSView {
     /// A `/` just typed at this place opens the menu once the edit lands.
     var pendingSlash: (block: BlockID, location: Int)?
     var drawingEditor: DrawingSourceEditor?
+    var deckEditor: DeckEditor?
     var isPerformingChange = false
+    private(set) lazy var touchBarProvider = EditorTouchBar { [weak self] command in self?.perform(command) }
 
     private(set) var pageViews: [PageView] = []
     private var pageViewsByID: [PageID: PageView] = [:]
@@ -36,9 +64,12 @@ public final class NoteEditorView: NSView {
     /// brings a block back also brings back its view and typing undo.
     private(set) var textViews: [BlockID: BlockTextView] = [:]
     private(set) var drawingViews: [BlockID: DrawingBlockView] = [:]
+    private(set) var deckViews: [BlockID: DeckBlockView] = [:]
     private let changes = ChangeCoalescer(delay: 0.3)
     private let textRouter = TextViewRouter()
     private(set) var visiblePage = 1
+    /// The font size block views were last given.
+    private var fontSize = PageGeometry.bodyFontSize
     private var isSyncing = false
     private var isLayingOut = false
 
@@ -80,9 +111,7 @@ public final class NoteEditorView: NSView {
         document = document.reconciled(with: note)
         self.note = document.note
         syncViews()
-        if let editor = drawingEditor, document.block(editor.blockID)?.drawing == nil {
-            closeDrawingEditor(commit: false)
-        }
+        closeEditorsOfRemovedBlocks()
         if preservingSelection {
             restoreScroll(anchor)
             if let focus { self.focus(transferred(focus, from: old), scroll: false) }
@@ -118,9 +147,34 @@ public final class NoteEditorView: NSView {
         }
     }
 
+    /// Inserts an empty flashcard deck at the caret (or the end of the
+    /// current page) and opens its editor.
+    public func insertDeckAtSelection() {
+        if case .text(let id, let range) = currentFocus {
+            insertDeck(splitting: id, at: range.location, page: currentPageIndex)
+        } else {
+            insertDeck(splitting: nil, at: nil, page: currentPageIndex)
+        }
+    }
+
     /// Adds a page after the current one and moves the caret there.
     public func addPage() {
         addPage(after: currentPageIndex)
+    }
+
+    /// Runs a formatting command on the selection, or inserts a block.
+    /// Text commands need a focused text block; each is one undoable step.
+    public func perform(_ command: EditorCommand) {
+        switch command {
+        case .drawing: insertDrawingAtSelection()
+        case .flashcards: insertDeckAtSelection()
+        case .newPage: addPage()
+        default:
+            guard case .text(let id, _) = currentFocus, let view = textViews[id],
+                  let change = MarkdownFormatting.apply(command, in: view.string, selection: view.selectedRange()) else { return }
+            closeSlashMenu()
+            perform(change, in: view, actionName: command.title)
+        }
     }
 
     // MARK: Setup and layout
@@ -160,7 +214,7 @@ public final class NoteEditorView: NSView {
     }
 
     var geometry: PageGeometry {
-        PageGeometry(documentWidth: scrollView.contentSize.width)
+        PageGeometry(documentWidth: scrollView.contentSize.width, mode: layoutMode)
     }
 
     /// Stacks the pages, keeping the page at the top of the viewport in place
@@ -171,13 +225,14 @@ public final class NoteEditorView: NSView {
         defer { isLayingOut = false }
         let width = scrollView.contentSize.width
         guard width > 0 else { return }
-        let geometry = PageGeometry(documentWidth: width)
+        let geometry = self.geometry
         let anchor = scrollAnchor()
+        applyFontSize(geometry.fontSize)
         let inset = PageGeometry.shadowInset
         var sheetTop = PageGeometry.pageGap
         for (index, page) in pageViews.enumerated() {
             if !page.isRealized, page.estimatedWidth != geometry.textWidth {
-                page.estimatedContentHeight = estimatedHeight(of: document.pages[index], width: geometry.textWidth)
+                page.estimatedContentHeight = estimatedHeight(of: document.pages[index], geometry: geometry)
                 page.estimatedWidth = geometry.textWidth
             }
             let height = page.layoutBlocks(geometry)
@@ -194,17 +249,27 @@ public final class NoteEditorView: NSView {
         handle.hide()
     }
 
-    private func estimatedHeight(of page: EditorPage, width: CGFloat) -> CGFloat {
+    /// Gives every block view the layout's font size (A4 scales the text).
+    private func applyFontSize(_ size: CGFloat) {
+        guard size != fontSize else { return }
+        fontSize = size
+        for view in textViews.values { view.fontSize = size }
+        for view in deckViews.values { view.fontSize = size }
+        for page in pageViews { page.estimatedWidth = 0 }
+    }
+
+    private func estimatedHeight(of page: EditorPage, geometry: PageGeometry) -> CGFloat {
+        let width = geometry.textWidth
         let blocks = page.blocks.map { block -> CGFloat in
             switch block.content {
-            case .text(let text): return HeightEstimate.text(text, width: width)
+            case .text(let text): return HeightEstimate.text(text, width: width, fontSize: geometry.fontSize)
             case .drawing(let drawing):
                 return DrawingBlockView.height(for: DrawingBlockView.canvasSize(for: drawing.source), width: width)
             case .cards(let deck):
-                return HeightEstimate.text(DeckPlaceholderView.text(for: deck), width: width)
+                return DeckBlockView.height(for: deck, width: width, fontSize: geometry.fontSize)
             }
         }
-        return blocks.reduce(0, +) + CGFloat(max(0, blocks.count - 1)) * PageGeometry.blockSpacing
+        return blocks.reduce(0, +) + CGFloat(max(0, blocks.count - 1)) * geometry.blockSpacing
     }
 
     struct ScrollAnchor {
@@ -225,6 +290,32 @@ public final class NoteEditorView: NSView {
         if abs(y - scrollView.contentView.bounds.minY) > 0.5 {
             scroll(toY: y)
         }
+    }
+
+    /// The block at the top of the viewport and how far into it (as a
+    /// fraction of its height) we've scrolled.
+    func topBlock() -> (id: BlockID, fraction: CGFloat)? {
+        let top = scrollView.contentView.bounds.minY
+        guard top > 0, let page = pageViews.first(where: { $0.frame.maxY > top }), page.isRealized else { return nil }
+        let local = top - page.frame.minY
+        guard let view = page.blockViews.first(where: { $0.frame.maxY > local }) ?? page.blockViews.last,
+              let id = blockID(of: view) else { return nil }
+        return (id, min(1, max(0, (local - view.frame.minY) / max(view.frame.height, 1))))
+    }
+
+    /// Runs a layout change and scrolls so the top block stays at the top.
+    private func keepingTopBlockInPlace(_ change: () -> Void) {
+        let anchor = topBlock()
+        change()
+        guard let anchor else { return }
+        for _ in 0..<2 {
+            guard let view = view(for: anchor.id), let page = view.superview else { return }
+            layoutSubtreeIfNeeded()
+            let y = documentView.convert(view.frame.origin, from: page).y
+            scroll(toY: y + anchor.fraction * view.frame.height)
+            realizeVisiblePages()
+        }
+        updateVisiblePage()
     }
 
     func scroll(toY y: CGFloat) {
@@ -298,13 +389,15 @@ public final class NoteEditorView: NSView {
             view.needsDisplay = true
             return view
         case .cards(let deck):
-            // TEMPORARY until the deck block view lands: a read-only summary.
-            return DeckPlaceholderView(deck: deck, palette: palette)
+            let view = deckViews[block.id] ?? makeDeckView(block.id, deck: deck)
+            view.deck = deck
+            return view
         }
     }
 
     private func makeTextView(_ id: BlockID, text: String) -> BlockTextView {
-        let view = BlockTextView(blockID: id, text: text, palette: palette, width: max(geometry.textWidth, 100))
+        let view = BlockTextView(blockID: id, text: text, palette: palette, width: max(geometry.textWidth, 100),
+                                 fontSize: fontSize, concealsMarkup: !showsMarkdownSyntax)
         view.delegate = textRouter
         view.blockDelegate = self
         textViews[id] = view
@@ -315,6 +408,13 @@ public final class NoteEditorView: NSView {
         let view = DrawingBlockView(blockID: id, source: source, palette: palette)
         view.delegate = self
         drawingViews[id] = view
+        return view
+    }
+
+    private func makeDeckView(_ id: BlockID, deck: CardDeck) -> DeckBlockView {
+        let view = DeckBlockView(blockID: id, deck: deck, palette: palette, fontSize: fontSize)
+        view.delegate = self
+        deckViews[id] = view
         return view
     }
 
@@ -351,7 +451,16 @@ public final class NoteEditorView: NSView {
         if !pageViews[location.page].isRealized {
             realize(page: location.page)
         }
-        return textViews[id] ?? drawingViews[id]
+        return textViews[id] ?? drawingViews[id] ?? deckViews[id]
+    }
+
+    func blockID(of view: NSView) -> BlockID? {
+        switch view {
+        case let text as BlockTextView: return text.blockID
+        case let drawing as DrawingBlockView: return drawing.blockID
+        case let deck as DeckBlockView: return deck.blockID
+        default: return nil
+        }
     }
 
     // MARK: Changes
@@ -375,17 +484,20 @@ public final class NoteEditorView: NSView {
 
     // MARK: Focus
 
+    /// Where the keyboard is: a caret or selection in a text block, or a
+    /// selected drawing or deck.
     enum Focus: Equatable {
         case text(BlockID, NSRange)
-        case drawing(BlockID)
+        case block(BlockID)
     }
 
     var currentFocus: Focus? {
         switch window?.firstResponder {
         case let text as BlockTextView where textViews[text.blockID] === text && document.block(text.blockID) != nil:
             return .text(text.blockID, text.selectedRange())
-        case let drawing as DrawingBlockView where document.block(drawing.blockID) != nil:
-            return .drawing(drawing.blockID)
+        case let view as NSView:
+            guard let id = blockID(of: view), !(view is BlockTextView), document.block(id) != nil else { return nil }
+            return .block(id)
         default:
             return nil
         }
@@ -402,8 +514,8 @@ public final class NoteEditorView: NSView {
             let start = min(range.location, length)
             view.setSelectedRange(NSRange(location: start, length: min(range.length, length - start)))
             if scroll { view.scrollRangeToVisible(view.selectedRange()) }
-        case .drawing(let id):
-            guard let view = view(for: id) as? DrawingBlockView else { return }
+        case .block(let id):
+            guard let view = view(for: id), !(view is BlockTextView) else { return }
             layoutSubtreeIfNeeded()
             window?.makeFirstResponder(view)
             if scroll { view.scrollToVisible(view.bounds) }
@@ -419,8 +531,8 @@ public final class NoteEditorView: NSView {
                 return .text(id, CaretTransform.transform(range, from: previous, to: new))
             }
             return old.location(of: id).flatMap { focusTarget(near: $0, caret: range.location) }
-        case .drawing(let id):
-            if document.block(id) != nil { return .drawing(id) }
+        case .block(let id):
+            if document.block(id) != nil { return .block(id) }
             return old.location(of: id).flatMap { focusTarget(near: $0, caret: 0) }
         }
     }
@@ -433,13 +545,13 @@ public final class NoteEditorView: NSView {
         if let text = block.text {
             return .text(block.id, NSRange(location: min(caret, (text as NSString).length), length: 0))
         }
-        return .drawing(block.id)
+        return .block(block.id)
     }
 
     /// The 0-based page of the focused block, or the visible page.
     var currentPageIndex: Int {
         switch currentFocus {
-        case .text(let id, _), .drawing(let id):
+        case .text(let id, _), .block(let id):
             if let location = document.location(of: id) { return location.page }
         case nil:
             break
@@ -456,7 +568,7 @@ public final class NoteEditorView: NSView {
         if let text = block.text {
             return .text(block.id, NSRange(location: (text as NSString).length, length: 0))
         }
-        return .drawing(block.id)
+        return .block(block.id)
     }
 
     // MARK: Undo
@@ -496,12 +608,20 @@ public final class NoteEditorView: NSView {
 
     private func restore(_ snapshot: Snapshot) {
         closeSlashMenu()
-        if let editor = drawingEditor, snapshot.document.block(editor.blockID)?.drawing == nil {
-            closeDrawingEditor(commit: false)
-        }
         document = document.restoring(snapshot.document)
+        closeEditorsOfRemovedBlocks()
         syncViews()
         noteDidChange()
         focus(snapshot.focus)
+    }
+
+    /// Closes the drawing or deck popover when its block is gone.
+    private func closeEditorsOfRemovedBlocks() {
+        if let editor = drawingEditor, document.block(editor.blockID)?.drawing == nil {
+            closeDrawingEditor(commit: false)
+        }
+        if let editor = deckEditor, document.block(editor.blockID)?.deck == nil {
+            closeDeckEditor(commit: false)
+        }
     }
 }
