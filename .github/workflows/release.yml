@@ -1,0 +1,143 @@
+# Builds the install DMG and attaches it to a draft GitHub Release.
+# Runs for pushed v* tags, or by hand from the Actions tab. Signing and
+# notarization happen only when their secrets are set; see docs/RELEASING.md.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version, e.g. 0.1.0-beta.2 (default: the tag, or Info.plist)"
+        required: false
+        type: string
+      plain_dmg:
+        description: "Skip the Finder window layout of the DMG"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-14
+    timeout-minutes: 60
+    env:
+      DMG_PLAIN: ${{ inputs.plain_dmg && '1' || vars.DMG_PLAIN || '0' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # build.sh numbers builds by commit count.
+          fetch-depth: 0
+
+      - name: Version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ -n "$INPUT_VERSION" ]; then
+            version=$INPUT_VERSION
+          elif [ "$GITHUB_REF_TYPE" = tag ]; then
+            version=$GITHUB_REF_NAME
+          else
+            version=$(plutil -extract CFBundleShortVersionString raw Resources/Info.plist)
+          fi
+          version=${version#v}
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "Whiteprint $version"
+          swift --version
+
+      - name: Test
+        run: Scripts/test.sh
+
+      - name: Check signing secrets
+        id: secrets
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          NOTARY_KEY: ${{ secrets.NOTARY_KEY }}
+        run: |
+          echo "sign=$([ -n "$MACOS_CERTIFICATE" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "notarize=$([ -n "$NOTARY_KEY" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Import Developer ID certificate
+        if: steps.secrets.outputs.sign == 'true'
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password=$(openssl rand -base64 24)
+          echo "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -f pkcs12 \
+            -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/certificate.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          identity=$(security find-identity -v -p codesigning "$keychain" \
+            | awk -F '"' '/Developer ID Application/ { print $2; exit }')
+          if [ -z "$identity" ]; then
+            echo "::error::No Developer ID Application identity in MACOS_CERTIFICATE"
+            exit 1
+          fi
+          echo "SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+
+      - name: Prepare notarization key
+        if: steps.secrets.outputs.notarize == 'true'
+        env:
+          NOTARY_KEY: ${{ secrets.NOTARY_KEY }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+        run: |
+          key="$RUNNER_TEMP/AuthKey.p8"
+          # The .p8 file as is, or base64-encoded.
+          if printf '%s' "$NOTARY_KEY" | grep -q -- '-----BEGIN'; then
+            printf '%s\n' "$NOTARY_KEY" > "$key"
+          else
+            printf '%s' "$NOTARY_KEY" | base64 --decode > "$key"
+          fi
+          {
+            echo "NOTARY_KEY_PATH=$key"
+            echo "NOTARY_KEY_ID=$NOTARY_KEY_ID"
+            echo "NOTARY_ISSUER_ID=$NOTARY_ISSUER_ID"
+          } >> "$GITHUB_ENV"
+
+      - name: Build DMG
+        run: Scripts/release.sh "$VERSION"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Whiteprint-${{ env.VERSION }}
+          path: |
+            .build/release/Whiteprint-${{ env.VERSION }}.dmg
+            .build/release/Whiteprint-${{ env.VERSION }}.dmg.sha256
+
+      - name: Draft GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="v$VERSION"
+          files=(".build/release/Whiteprint-$VERSION.dmg" ".build/release/Whiteprint-$VERSION.dmg.sha256")
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "${files[@]}" --clobber
+          else
+            prerelease=()
+            case "$VERSION" in *-*) prerelease=(--prerelease) ;; esac
+            gh release create "$tag" "${files[@]}" --draft --generate-notes \
+              --title "Whiteprint $VERSION" --target "$GITHUB_SHA" "${prerelease[@]}"
+          fi
+
+      - name: Remove signing keychain and key
+        if: always()
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          if [ -f "$keychain" ]; then security delete-keychain "$keychain"; fi
+          rm -f "$RUNNER_TEMP/AuthKey.p8"

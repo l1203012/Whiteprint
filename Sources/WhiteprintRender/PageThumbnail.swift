@@ -46,7 +46,7 @@ public enum PageThumbnail {
         let scale = size.width / pageWidth
         var spacing = SceneRenderer.unit * scale
         while spacing < 4 { spacing *= 2 }
-        PageGrid.stroke(in: context, size: size, spacing: spacing, color: palette.grid, lineWidth: 0.5)
+        strokeGrid(in: context, size: size, spacing: spacing, color: palette.grid)
 
         context.scaleBy(x: scale, y: scale)
         var layout = ThumbnailLayout(
@@ -59,6 +59,29 @@ public enum PageThumbnail {
             case .cards(let deck): layout.addText("🗂 " + (deck.title ?? "Flashcards") + " · \(deck.cards.count) cards")
             }
         }
+        context.restoreGState()
+    }
+
+    /// The faint square grid, as hairlines `spacing` apart.
+    private static func strokeGrid(in context: CGContext, size: CGSize, spacing: CGFloat, color: NSColor) {
+        let path = CGMutablePath()
+        var x = spacing
+        while x < size.width {
+            path.move(to: CGPoint(x: x, y: 0))
+            path.addLine(to: CGPoint(x: x, y: size.height))
+            x += spacing
+        }
+        var y = spacing
+        while y < size.height {
+            path.move(to: CGPoint(x: 0, y: y))
+            path.addLine(to: CGPoint(x: size.width, y: y))
+            y += spacing
+        }
+        context.saveGState()
+        context.setStrokeColor(color.cgColor)
+        context.setLineWidth(0.5)
+        context.addPath(path)
+        context.strokePath()
         context.restoreGState()
     }
 }

@@ -10,7 +10,8 @@ public enum PDFExporter {
     /// A4 or US Letter by locale, typeset text only (drawings are left out),
     /// one or more PDF pages per note page, page breaks at `+++page`.
     /// Note pages without any text are skipped, except the first.
-    public static func data(for note: Note, style: PDFExportStyle) -> Data {
+    /// Blueprint pages carry a title block dated `date`.
+    public static func data(for note: Note, style: PDFExportStyle, date: Date = Date()) -> Data {
         let palette = style == .blueprint ? BlueprintPalette.blueprint : .print
         let pageSize = paperSize(region: Locale.current.region?.identifier)
         let title = note.frontMatter.title.flatMap { $0.isEmpty ? nil : $0 }
@@ -22,15 +23,22 @@ public enum PDFExporter {
               let context = CGContext(consumer: consumer, mediaBox: &mediaBox, info as CFDictionary)
         else { return Data() }
 
-        var typesetter = PDFTypesetter(context: context, pageSize: pageSize, palette: palette, style: style)
+        var typesetter = PDFTypesetter(pageSize: pageSize)
         for (index, text) in pageTexts(of: note).enumerated() {
+            let content = NSMutableAttributedString()
+            if index == 0, let title, !text.hasPrefix("# \(title)") {
+                content.append(titleString(title, palette: palette, followedByText: !text.isEmpty))
+            }
+            content.append(MarkdownStyler.presentation(markdown: text, palette: palette, fontSize: fontSize))
+            typesetter.typeset(content)
+        }
+        let painter = PDFPagePainter(context: context, pageSize: pageSize, palette: palette, style: style)
+        for (index, page) in typesetter.pages.enumerated() {
             autoreleasepool {
-                let content = NSMutableAttributedString()
-                if index == 0, let title, !text.hasPrefix("# \(title)") {
-                    content.append(titleString(title, palette: palette, followedByText: !text.isEmpty))
-                }
-                content.append(MarkdownStyler.presentation(markdown: text, palette: palette, fontSize: fontSize))
-                typesetter.typeset(content)
+                let block = BlueprintBackground.TitleBlock(
+                    title: title ?? "Untitled", page: index + 1, pageCount: typesetter.pages.count, date: date
+                )
+                painter.draw(page, titleBlock: block)
             }
         }
         context.closePDF()
@@ -65,22 +73,24 @@ public enum PDFExporter {
     }
 }
 
-/// Flows attributed text over as many PDF pages as it needs.
+/// Flows attributed text over as many PDF pages as it needs. Pages are laid
+/// out before any is drawn, so each page knows the page count.
 private struct PDFTypesetter {
-    let context: CGContext
-    let pageSize: CGSize
-    let palette: BlueprintPalette
-    let style: PDFExportStyle
-    private var pageNumber = 0
-
-    init(context: CGContext, pageSize: CGSize, palette: BlueprintPalette, style: PDFExportStyle) {
-        self.context = context
-        self.pageSize = pageSize
-        self.palette = palette
-        self.style = style
+    /// The text of one PDF page.
+    struct Page {
+        let storage: NSTextStorage
+        let layout: NSLayoutManager
+        let glyphs: NSRange
     }
 
-    /// Starts a new PDF page and fills pages until all of `text` is placed.
+    let pageSize: CGSize
+    private(set) var pages: [Page] = []
+
+    init(pageSize: CGSize) {
+        self.pageSize = pageSize
+    }
+
+    /// Starts a new page and adds pages until all of `text` is placed.
     mutating func typeset(_ text: NSAttributedString) {
         let storage = NSTextStorage(attributedString: text)
         let layout = NSLayoutManager()
@@ -93,44 +103,53 @@ private struct PDFTypesetter {
             container.lineFragmentPadding = 0
             layout.addTextContainer(container)
             let range = layout.glyphRange(for: container)
-            drawPage(layout, glyphs: range)
+            pages.append(Page(storage: storage, layout: layout, glyphs: range))
             guard range.length > 0 else { break }
             placed = NSMaxRange(range)
         } while placed < layout.numberOfGlyphs
     }
+}
 
-    private mutating func drawPage(_ layout: NSLayoutManager, glyphs: NSRange) {
-        pageNumber += 1
+/// Draws laid-out pages on blueprint or white paper.
+private struct PDFPagePainter {
+    let context: CGContext
+    let pageSize: CGSize
+    let palette: BlueprintPalette
+    let style: PDFExportStyle
+
+    func draw(_ page: PDFTypesetter.Page, titleBlock: BlueprintBackground.TitleBlock) {
         context.beginPDFPage(nil)
         context.saveGState()
         context.translateBy(x: 0, y: pageSize.height)
         context.scaleBy(x: 1, y: -1)
-        drawPaper()
+        let paper = CGRect(origin: .zero, size: pageSize)
+        switch style {
+        case .blueprint:
+            BlueprintBackground.draw(in: context, rect: paper, palette: palette, options: .init(frame: true))
+        case .print:
+            BlueprintBackground.draw(in: context, rect: paper, palette: palette, options: .plain)
+        }
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
         let origin = CGPoint(x: PDFExporter.margin, y: PDFExporter.margin)
-        layout.drawBackground(forGlyphRange: glyphs, at: origin)
-        layout.drawGlyphs(forGlyphRange: glyphs, at: origin)
-        drawRules(layout, glyphs: glyphs, origin: origin)
-        drawPageNumber()
+        page.layout.drawBackground(forGlyphRange: page.glyphs, at: origin)
+        page.layout.drawGlyphs(forGlyphRange: page.glyphs, at: origin)
+        drawRules(page, origin: origin)
+        switch style {
+        case .blueprint: BlueprintBackground.drawTitleBlock(titleBlock, in: context, rect: paper, palette: palette)
+        case .print: drawPageNumber(titleBlock.page)
+        }
         NSGraphicsContext.restoreGraphicsState()
         context.restoreGState()
         context.endPDFPage()
     }
 
-    private func drawPaper() {
-        context.setFillColor(palette.pageBackground.cgColor)
-        context.fill(CGRect(origin: .zero, size: pageSize))
-        guard style == .blueprint else { return }
-        PageGrid.fillPattern(in: context, size: pageSize, color: palette.grid)
-    }
-
     /// Horizontal rules for the divider lines of presentation text.
-    private func drawRules(_ layout: NSLayoutManager, glyphs: NSRange, origin: CGPoint) {
-        guard let storage = layout.textStorage else { return }
-        let characters = layout.characterRange(forGlyphRange: glyphs, actualGlyphRange: nil)
+    private func drawRules(_ page: PDFTypesetter.Page, origin: CGPoint) {
+        let layout = page.layout
+        let characters = layout.characterRange(forGlyphRange: page.glyphs, actualGlyphRange: nil)
         let width = pageSize.width - 2 * PDFExporter.margin
-        storage.enumerateAttribute(MarkdownStyler.ruleKey, in: characters) { value, range, _ in
+        page.storage.enumerateAttribute(MarkdownStyler.ruleKey, in: characters) { value, range, _ in
             guard value != nil else { return }
             let glyph = layout.glyphIndexForCharacter(at: range.location)
             let line = layout.lineFragmentUsedRect(forGlyphAt: glyph, effectiveRange: nil)
@@ -143,63 +162,12 @@ private struct PDFTypesetter {
         }
     }
 
-    private func drawPageNumber() {
-        let label = NSAttributedString(string: String(pageNumber), attributes: [
+    private func drawPageNumber(_ number: Int) {
+        let label = NSAttributedString(string: String(number), attributes: [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .regular),
             .foregroundColor: palette.muted,
         ])
         let size = label.size()
         label.draw(at: CGPoint(x: (pageSize.width - size.width) / 2, y: pageSize.height - PDFExporter.margin / 2 - size.height / 2))
-    }
-}
-
-/// The faint square grid behind blueprint pages.
-enum PageGrid {
-    static func stroke(in context: CGContext, size: CGSize, spacing: CGFloat, color: NSColor, lineWidth: CGFloat = 0.5) {
-        guard spacing > 0 else { return }
-        let path = CGMutablePath()
-        var x = spacing
-        while x < size.width {
-            path.move(to: CGPoint(x: x, y: 0))
-            path.addLine(to: CGPoint(x: x, y: size.height))
-            x += spacing
-        }
-        var y = spacing
-        while y < size.height {
-            path.move(to: CGPoint(x: 0, y: y))
-            path.addLine(to: CGPoint(x: size.width, y: y))
-            y += spacing
-        }
-        context.saveGState()
-        context.setStrokeColor(color.cgColor)
-        context.setLineWidth(lineWidth)
-        context.addPath(path)
-        context.strokePath()
-        context.restoreGState()
-    }
-
-    /// The grid in `SceneRenderer.unit` cells as one tiling pattern. In a PDF,
-    /// hundreds of stroked lines make viewers split copied text into fragments.
-    static func fillPattern(in context: CGContext, size: CGSize, color: NSColor) {
-        let cell = SceneRenderer.unit
-        var callbacks = CGPatternCallbacks(version: 0, drawPattern: { _, tile in
-            tile.fill(CGRect(x: 0, y: 0, width: SceneRenderer.unit, height: 0.5))
-            tile.fill(CGRect(x: 0, y: 0, width: 0.5, height: SceneRenderer.unit))
-        }, releaseInfo: nil)
-        guard let srgb = CGColorSpace(name: CGColorSpace.sRGB),
-              let space = CGColorSpace(patternBaseSpace: srgb),
-              let rgba = color.usingColorSpace(.sRGB),
-              let pattern = CGPattern(
-                  info: nil, bounds: CGRect(x: 0, y: 0, width: cell, height: cell),
-                  matrix: .identity, xStep: cell, yStep: cell,
-                  tiling: .constantSpacing, isColored: false, callbacks: &callbacks
-              )
-        else { return }
-        var components = [rgba.redComponent, rgba.greenComponent, rgba.blueComponent, rgba.alphaComponent]
-        context.saveGState()
-        context.setFillColorSpace(space)
-        context.setFillPattern(pattern, colorComponents: &components)
-        context.fill(CGRect(origin: .zero, size: size))
-        context.restoreGState()
     }
 }
