@@ -1,0 +1,13 @@
+# Keeps the actions used by the workflows up to date: one grouped pull request a week.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: main-macos
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: CI

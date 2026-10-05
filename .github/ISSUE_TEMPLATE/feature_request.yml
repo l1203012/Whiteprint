@@ -1,0 +1,36 @@
+name: Feature request
+description: Suggest an idea or an improvement for Whiteprint.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The task or problem behind the request, in your own words.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would help?
+      description: How you imagine it working in Whiteprint.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What do you do today?
+      description: Workarounds or other apps you use for this, if any.
+    validations:
+      required: false
+
+  - type: input
+    id: whiteprint-version
+    attributes:
+      label: Whiteprint version
+      description: Optional; the version you are using.
+      placeholder: 0.1.0-beta.1
+    validations:
+      required: false

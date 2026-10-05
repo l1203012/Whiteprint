@@ -1,0 +1,73 @@
+name: Bug report
+description: Something in Whiteprint doesn't work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Please check the [open issues](https://github.com/l1203012/Whiteprint-Notetaking-Application/issues) first, in case it is already known.
+
+  - type: input
+    id: whiteprint-version
+    attributes:
+      label: Whiteprint version
+      description: Whiteprint → About Whiteprint, or the name of the DMG you installed (e.g. 0.1.0-beta.1, or 0.1.0-beta.1-edge.42).
+      placeholder: 0.1.0-beta.1
+    validations:
+      required: true
+
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS version
+      description: Apple menu → About This Mac.
+      placeholder: macOS 14.6 Sonoma
+    validations:
+      required: true
+
+  - type: dropdown
+    id: architecture
+    attributes:
+      label: Mac
+      description: Apple menu → About This Mac shows the chip (Apple M…) or processor (Intel).
+      options:
+        - Apple Silicon (M1, M2, M3, …)
+        - Intel
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What did you do? Small example notes help a lot.
+      placeholder: |
+        1. Create a note with …
+        2. Switch to …
+        3. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: What happened instead? Screenshots, error messages or a crash report are welcome.
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: How often it happens, whether it started with a particular version, workarounds you found.
+    validations:
+      required: false
