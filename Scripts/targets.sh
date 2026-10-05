@@ -1,5 +1,10 @@
-# Module graph shared by build.sh and test.sh. Keep in sync with Package.swift.
+# shellcheck shell=bash
+# Module graph shared by build.sh and test.sh. Keep in sync with Package.swift
+# (Scripts/check-targets.sh compares the two; CI runs it).
+# LIBS and EXES are read by the scripts that source this file.
+# shellcheck disable=SC2034
 LIBS="WhiteprintCore WhiteprintExtract WhiteprintRender WhiteprintBridge WhiteprintStudy WhiteprintEditor"
+# shellcheck disable=SC2034
 EXES="WhiteprintApp whiteprint-mcp"
 
 deps() {

@@ -113,8 +113,8 @@ set_volume_icon() {
 }
 
 detach() {
-    local device=$1 attempt
-    for attempt in 1 2 3 4 5; do
+    local device=$1 _
+    for _ in 1 2 3 4 5; do
         hdiutil detach "$device" -quiet && return 0
         sleep 2
     done
@@ -145,8 +145,8 @@ make_dmg() {
         echo "  plain window layout (DMG_PLAIN=1)"
     elif layout_window; then
         # Finder writes .DS_Store asynchronously.
-        local i
-        for i in $(seq 1 20); do
+        local _
+        for _ in $(seq 1 20); do
             [ -s "$volume/.DS_Store" ] && break
             sleep 0.5
         done

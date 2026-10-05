@@ -92,6 +92,7 @@ universal() {
 }
 
 bundle() {
+    # shellcheck disable=SC2086 # EXES is a space-separated list
     build $EXES
     local app=$ROOT/.build/Whiteprint.app
     rm -rf "$app"
@@ -115,6 +116,7 @@ bundle() {
     echo "✓ $app"
 }
 
+# shellcheck disable=SC2086 # LIBS and EXES are space-separated lists
 case "${1:-all}" in
     all) build $LIBS $EXES ;;
     app) bundle ;;
