@@ -1,4 +1,5 @@
 import AppKit
+import WhiteprintEditor
 
 /// The menu bar, built in code. Actions go up the responder chain: note
 /// actions to the window controller or document, app actions to the delegate.

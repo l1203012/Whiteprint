@@ -1,4 +1,5 @@
 import AppKit
+import WhiteprintEditor
 import WhiteprintBridge
 import WhiteprintCore
 import WhiteprintStudy
