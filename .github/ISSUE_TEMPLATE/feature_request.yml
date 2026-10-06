@@ -31,6 +31,6 @@ body:
     attributes:
       label: Whiteprint version
       description: Optional; the version you are using.
-      placeholder: 0.1.0-beta.1
+      placeholder: 0.1.1
     validations:
       required: false

@@ -10,8 +10,10 @@ look at closely, follow-ups left for later. Link related issues ("Fixes #123"). 
 
 ## Testing
 
-<!-- One checkbox per step a reviewer can run and tick off. The CI run uploads a build of the
-app (Whiteprint-app-<commit>.zip under the run's Artifacts) for trying the change by hand. -->
+<!-- One checkbox per step a reviewer can run and tick off; drop the platform you didn't touch.
+For trying the change by hand, the macOS CI run uploads Whiteprint-app-<commit>.zip and the Windows
+edge build uploads Whiteprint-<version>-edge.<run>-Setup.exe under the run's Artifacts. -->
 
-- [ ] `Scripts/test.sh` passes
+- [ ] macOS: `Scripts/test.sh` passes
+- [ ] Windows: `windows\build.ps1` passes
 - [ ] 

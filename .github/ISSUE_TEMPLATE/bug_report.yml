@@ -7,32 +7,55 @@ body:
       value: |
         Thanks for reporting a problem. Please check the [open issues](https://github.com/l1203012/Whiteprint-Notetaking-Application/issues) first, in case it is already known.
 
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS
+        - Windows
+    validations:
+      required: true
+
   - type: input
     id: whiteprint-version
     attributes:
       label: Whiteprint version
-      description: Whiteprint → About Whiteprint, or the name of the DMG you installed (e.g. 0.1.0-beta.1, or 0.1.0-beta.1-edge.42).
-      placeholder: 0.1.0-beta.1
+      description: The name of the DMG or Setup.exe you installed (e.g. 0.1.0-beta.1, 0.1.1, or 0.1.0-beta.1-edge.42). On macOS also Whiteprint → About Whiteprint.
+      placeholder: 0.1.1
     validations:
       required: true
 
   - type: input
-    id: macos-version
+    id: os-version
     attributes:
-      label: macOS version
-      description: Apple menu → About This Mac.
-      placeholder: macOS 14.6 Sonoma
+      label: OS version
+      description: On macOS, Apple menu → About This Mac. On Windows, Settings → System → About, or run `winver`.
+      placeholder: macOS 14.6 Sonoma / Windows 11 23H2
     validations:
       required: true
 
   - type: dropdown
-    id: architecture
+    id: hardware
     attributes:
-      label: Mac
-      description: Apple menu → About This Mac shows the chip (Apple M…) or processor (Intel).
+      label: Hardware
+      description: On a Mac, About This Mac shows the chip (Apple M…) or processor (Intel).
       options:
-        - Apple Silicon (M1, M2, M3, …)
-        - Intel
+        - Mac with Apple Silicon (M1, M2, M3, …)
+        - Mac with Intel
+        - Windows PC (64-bit)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: How did you install it?
+      options:
+        - DMG or Setup.exe from a GitHub release
+        - winget
+        - Edge build (workflow artifact)
+        - Built from source
     validations:
       required: true
 

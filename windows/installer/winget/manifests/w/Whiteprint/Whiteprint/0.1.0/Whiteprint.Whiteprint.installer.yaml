@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
+PackageIdentifier: Whiteprint.Whiteprint
+PackageVersion: 0.1.0
+InstallerType: inno
+Scope: user
+MinimumOSVersion: 10.0.0.0
+UpgradeBehavior: install
+FileExtensions:
+- wprint
+Installers:
+- Architecture: x64
+  InstallerUrl: https://github.com/l1203012/Whiteprint/releases/download/v0.1.0/Whiteprint-0.1.0-Setup.exe
+  InstallerSha256: 4FC31CE4C92FE28A3A109DD5148A7B2155EC198CE34BAE337AB3E44F6715F09A
+  ProductCode: '{6F0B7A52-3D3E-4C77-9B58-5E1A0F7C2A91}_is1'
+ManifestType: installer
+ManifestVersion: 1.6.0

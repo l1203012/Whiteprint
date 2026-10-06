@@ -4,16 +4,17 @@
 
 # Whiteprint
 
-**Blueprint-style notes for macOS, with Claude drawing your diagrams.**
+**Blueprint-style notes for macOS and Windows, with Claude drawing your diagrams.**
 
-[![CI](https://github.com/l1203012/Whiteprint-Notetaking-Application/actions/workflows/ci.yml/badge.svg?branch=main-macos)](https://github.com/l1203012/Whiteprint-Notetaking-Application/actions/workflows/ci.yml)
-[![Edge build](https://github.com/l1203012/Whiteprint-Notetaking-Application/actions/workflows/edge.yml/badge.svg)](https://github.com/l1203012/Whiteprint-Notetaking-Application/actions/workflows/edge.yml)
+[![macOS CI](https://github.com/l1203012/Whiteprint-Notetaking-Application/actions/workflows/ci.yml/badge.svg?branch=main-macos)](https://github.com/l1203012/Whiteprint-Notetaking-Application/actions/workflows/ci.yml)
+[![Windows CI](https://github.com/l1203012/Whiteprint-Notetaking-Application/actions/workflows/windows-ci.yml/badge.svg)](https://github.com/l1203012/Whiteprint-Notetaking-Application/actions/workflows/windows-ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/l1203012/Whiteprint-Notetaking-Application?include_prereleases&sort=semver&label=release)](https://github.com/l1203012/Whiteprint-Notetaking-Application/releases)
 [![Downloads](https://img.shields.io/github/downloads/l1203012/Whiteprint-Notetaking-Application/total)](https://github.com/l1203012/Whiteprint-Notetaking-Application/releases)
 <br>
-[![macOS 13+](https://img.shields.io/badge/macOS-13%2B-1E4D8C?logo=apple&logoColor=white)](#install)
-[![Swift 5.8+](https://img.shields.io/badge/Swift-5.8%2B-F05138?logo=swift&logoColor=white)](#development)
-[![Intel and Apple Silicon](https://img.shields.io/badge/Intel%20%2B%20Apple%20Silicon-universal-555)](#install)
+[![macOS 13+](https://img.shields.io/badge/macOS-13%2B-1E4D8C?logo=apple&logoColor=white)](#macos)
+[![Windows 10+](https://img.shields.io/badge/Windows-10%2B-1E4D8C?logo=windows&logoColor=white)](#windows)
+[![Swift 5.8+](https://img.shields.io/badge/Swift-5.8%2B-F05138?logo=swift&logoColor=white)](#macos-1)
+[![C++20 and Qt 6.8](https://img.shields.io/badge/C%2B%2B20-Qt%206.8-41CD52?logo=qt&logoColor=white)](#windows-1)
 [![MIT license](https://img.shields.io/badge/license-MIT-9FD3FF)](LICENSE)
 
 [**Download**](https://github.com/l1203012/Whiteprint-Notetaking-Application/releases) ·
@@ -24,23 +25,28 @@
 
 <br>
 
-<img src="docs/images/main.png" alt="Whiteprint: a note with a heading, a request-flow diagram and a checklist on a blue blueprint page, with the folder tree in the sidebar and three tabs">
+<img src="docs/images/main.png" alt="Whiteprint on macOS: a note with a heading, a request-flow diagram and a checklist on a blue blueprint page, with the folder tree in the sidebar and three tabs">
 
 </div>
 
-Whiteprint is a native Mac notes app where every page is a sheet of blueprint paper: blue background,
-faint grid, white text. You write in Markdown with a calm, Notion-style editor. Claude connects over MCP
-to read and write your notes and to draw diagrams in a compact drawing language, so a whole diagram
-costs a few dozen tokens. Drop in lecture slides, PDFs or Word files and Whiteprint turns them into a
-study plan with flashcards, using your own Claude subscription (or a Grok API key).
+Whiteprint is a native notes app for macOS and Windows where every page is a sheet of blueprint paper:
+blue background, faint grid, white text. You write in Markdown with a calm, Notion-style editor. Claude
+connects over MCP to read and write your notes and to draw diagrams in a compact drawing language, so a
+whole diagram costs a few dozen tokens. Drop in lecture slides, PDFs or Word files and Whiteprint turns
+them into a study plan with flashcards, using your own Claude subscription (or a Grok API key).
+
+There are two native apps from one design: a Swift/AppKit app for the Mac (`Sources/`) and a C++/Qt
+port for Windows (`windows/`). Both read and write the same `.wprint` files, so notes move between them
+unchanged.
 
 > [!NOTE]
-> **Beta 1** (`v0.1.0-beta.1`) is macOS only and not notarized yet. See [first launch](#4-first-launch-of-an-unsigned-beta).
+> **macOS** is at **Beta 1** (`v0.1.0-beta.1`) and not notarized yet; see [first launch](#macos).
+> **Windows** is at **0.1.1** (`windows-v0.1.1`) and not code-signed yet; see [first launch](#windows).
 
 ## Contents
 
 - [Features](#features)
-- [Install](#install)
+- [Install](#install): [macOS](#macos) · [Windows](#windows)
 - [Using Whiteprint](#using-whiteprint)
 - [Connect Claude](#connect-claude)
 - [Study plans and flashcards](#study-plans-and-flashcards)
@@ -61,9 +67,9 @@ study plan with flashcards, using your own Claude subscription (or a Grok API ke
 | 🎓 **Study plans** | PDF, Word and PowerPoint in; a note with ★ must-know / ○ good-to-know / ✕ skip tiers, a learning path, a to-do list and flashcards out. |
 | 🗂️ **Flashcards** | Decks live inside notes. Study them with spaced repetition (Again / Hard / Good / Easy). |
 | 📄 **Export** | PDF on blueprint paper with a title block, PDF for printing, or plain Markdown. |
-| 🗃️ **Tabs and folders** | Notes are plain `.wprint` files in `~/Documents/Whiteprint`, in folders as deep as you like, opened as tabs. |
-| ⌨️ **Keyboard first** | ⌘K command palette, shortcuts for every format, a Touch Bar on Macs that have one. |
-| 🪶 **Light** | Native AppKit, no Electron, no web view: about 45 MB of memory with a note open. Universal binary for Intel and Apple Silicon. |
+| 🗃️ **Folders** | Notes are plain `.wprint` files in `Documents/Whiteprint`, in folders as deep as you like. On macOS they open as tabs, on Windows each note gets its own window. |
+| ⌨️ **Keyboard first** | <kbd>⌘</kbd><kbd>K</kbd> / <kbd>Ctrl</kbd><kbd>K</kbd> command palette, shortcuts for every format, a Touch Bar on Macs that have one. |
+| 🪶 **Light** | Native AppKit on the Mac and Qt Widgets on Windows: no Electron, no web view. The Mac app is a universal binary for Intel and Apple Silicon. |
 
 <table>
   <tr>
@@ -82,19 +88,33 @@ study plan with flashcards, using your own Claude subscription (or a Grok API ke
     <td align="center"><sub>Double-click a drawing to edit its source</sub></td>
     <td align="center"><sub>Dark mode: the chrome changes, the paper doesn't</sub></td>
   </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/windows/main.png" alt="Whiteprint on Windows: the same kind of note on a blueprint page, with the folder tree and the page list in the sidebar"></td>
+    <td width="50%"><img src="docs/images/windows/main-dark.png" alt="Whiteprint on Windows in dark mode; the page stays blue"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>The Windows app</sub></td>
+    <td align="center"><sub>…and in dark mode</sub></td>
+  </tr>
 </table>
+
+More Windows screenshots are in [`docs/images/windows`](docs/images/windows).
 
 ## Install
 
+AI features need Claude Code, Claude Desktop or a Grok API key; everything else works without them.
+
+### macOS
+
 <img src="docs/images/install-dmg.png" width="540" align="right" alt="The Whiteprint disk image window: drag the Whiteprint icon onto the Applications folder">
 
-**Requirements:** macOS 13 Ventura or later, Intel or Apple Silicon. Claude Code, Claude Desktop or a
-Grok API key only for the AI features.
+**Requirements:** macOS 13 Ventura or later, Intel or Apple Silicon.
 
 #### 1. Download
 
 Get `Whiteprint-<version>.dmg` and `Whiteprint-<version>.dmg.sha256` from
-[**Releases**](https://github.com/l1203012/Whiteprint-Notetaking-Application/releases).
+[**Releases**](https://github.com/l1203012/Whiteprint-Notetaking-Application/releases) (macOS releases
+are tagged `vX.Y.Z`).
 
 #### 2. Check the download (optional)
 
@@ -134,7 +154,7 @@ in the sidebar. Pick another folder in **Settings ▸ Notes**. On first launch w
 Whiteprint writes a short Welcome note.
 
 <details>
-<summary><b>Updating and uninstalling</b></summary>
+<summary><b>Updating and uninstalling on macOS</b></summary>
 
 **Update:** quit Whiteprint, download the new DMG and drag Whiteprint to Applications again, choosing
 **Replace**. Your notes and settings are kept. A new unsigned beta may need the first-launch step again.
@@ -154,7 +174,78 @@ saved a Grok key. Your notes in `~/Documents/Whiteprint` are yours to keep or de
 
 </details>
 
+### Windows
+
+**Requirements:** Windows 10 or 11, 64-bit.
+
+#### With winget
+
+```powershell
+winget install Whiteprint.Whiteprint
+```
+
+> [!NOTE]
+> The package is submitted to the winget community repository
+> ([microsoft/winget-pkgs#447499](https://github.com/microsoft/winget-pkgs/pull/447499)). Until it is
+> merged, use the installer below.
+
+#### 1. Download
+
+Get `Whiteprint-<version>-Setup.exe` and `Whiteprint-<version>-Setup.exe.sha256` from
+[**Releases**](https://github.com/l1203012/Whiteprint-Notetaking-Application/releases) (Windows
+releases are tagged `windows-vX.Y.Z`).
+
+#### 2. Check the download (optional)
+
+In PowerShell, in the folder you downloaded both files to:
+
+```powershell
+(Get-FileHash Whiteprint-0.1.1-Setup.exe -Algorithm SHA256).Hash -eq (Get-Content Whiteprint-0.1.1-Setup.exe.sha256).Split(' ')[0]
+# True
+```
+
+#### 3. First launch of an unsigned installer
+
+The installer is not code-signed yet, so Windows SmartScreen may say *"Windows protected your PC"*. Click
+**More info**, then **Run anyway**. The installer offers an optional desktop shortcut; later launches
+work normally.
+
+- It installs **for your user only** by default, so no administrator rights are needed. The first page
+  also offers an all-users install.
+- It adds Start menu (and optional desktop) shortcuts and makes `.wprint` files open in Whiteprint, with
+  the app icon.
+
+#### 4. Your notes
+
+Notes are saved in **`Documents\Whiteprint`** as plain `.wprint` files; subfolders show up as folders in
+the sidebar. Pick another folder in **Settings ▸ Notes**. On first launch with an empty folder,
+Whiteprint writes a short Welcome note.
+
+<details>
+<summary><b>Updating and uninstalling on Windows</b></summary>
+
+**Update:** run the new `Setup.exe` over the old install, or `winget upgrade Whiteprint.Whiteprint`. Your
+notes and settings are kept.
+
+**Uninstall:** **Settings ▸ Apps ▸ Installed apps ▸ Whiteprint ▸ Uninstall**, or
+`winget uninstall Whiteprint.Whiteprint`. To remove everything else too:
+
+```powershell
+Remove-Item -Recurse "$env:APPDATA\Whiteprint"                # study imports, flashcard progress
+Remove-Item -Recurse "HKCU:\Software\Whiteprint"              # preferences
+claude mcp remove --scope user whiteprint                     # if you added it to Claude Code
+```
+
+Remove the `whiteprint` entry from `%APPDATA%\Claude\claude_desktop_config.json` if you connected Claude
+Desktop, and the `io.github.l1203012.whiteprint/xai-api-key` entry from **Credential Manager** if you saved a
+Grok key. Your notes in `Documents\Whiteprint` are yours to keep or delete.
+
+</details>
+
 ## Using Whiteprint
+
+Shortcuts are written macOS-first; on Windows use <kbd>Ctrl</kbd> for <kbd>⌘</kbd>, <kbd>Alt</kbd> for
+<kbd>⌥</kbd>, <kbd>Enter</kbd> for <kbd>↩</kbd>. The full table for both is [below](#keyboard-shortcuts).
 
 ### Editor
 
@@ -189,22 +280,23 @@ saved a Grok key. Your notes in `~/Documents/Whiteprint` are yours to keep or de
   </tr>
 </table>
 
-Switch with **View ▸ Page Layout** or the Touch Bar. The setting applies to every open note.
+Switch with **View ▸ Page Layout** (or the Touch Bar). The setting applies to every open note.
 
-### Tabs, folders and the sidebar
+### Tabs, windows, folders and the sidebar
 
-Notes open as tabs of one window (<kbd>⌘</kbd><kbd>T</kbd> makes a new note in a new tab). The sidebar
-has three sections:
+On macOS, notes open as tabs of one window (<kbd>⌘</kbd><kbd>T</kbd> makes a new note in a new tab). On
+Windows, each note opens in its own window. The sidebar has three sections:
 
 - **Notes:** the notes folder as a tree. <kbd>⇧</kbd><kbd>⌘</kbd><kbd>N</kbd> creates a folder in the
-  selected one; drag notes between folders; right-click to rename, show in Finder or move to the Trash.
+  selected one; drag notes between folders; right-click to rename, show in Finder / Explorer or move to
+  the Trash / Recycle Bin.
 - **Pages:** the current note's pages with thumbnails.
 - **Study:** imported course material, **Generate study plan**, and every flashcard deck with the number
   of cards to study (due and new).
 
 ### Export
 
-**File ▸ Export** (or the `⋯` toolbar menu):
+**File ▸ Export** (or the `⋯` toolbar menu on macOS):
 
 | Format | What you get |
 |---|---|
@@ -213,7 +305,7 @@ has three sections:
 | **Markdown…** | Plain Markdown: front matter dropped, drawings replaced by `*[drawing omitted]*`, decks as lists, pages separated by rules. |
 
 PDFs are A4 (US Letter in the US and Canada) and break pages at each note page. Drawings are not part of
-the PDF in Beta 1.
+the PDF yet.
 
 <p align="center"><img src="docs/images/pdf-export.png" width="720" alt="Page one of a note exported as PDF, in Blueprint style with a title block and in Print style on white paper"></p>
 
@@ -222,28 +314,32 @@ the PDF in Beta 1.
 <details open>
 <summary><b>Shortcuts from the menus</b></summary>
 
-| Action | Shortcut | Menu |
-|---|---|---|
-| New note | <kbd>⌘</kbd><kbd>N</kbd> | File |
-| New tab (new note) | <kbd>⌘</kbd><kbd>T</kbd> | File |
-| New folder | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>N</kbd> | File |
-| Open… | <kbd>⌘</kbd><kbd>O</kbd> | File |
-| Duplicate | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>S</kbd> | File |
-| Show in Finder | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>R</kbd> | File |
-| Command palette | <kbd>⌘</kbd><kbd>K</kbd> | View |
-| Toggle sidebar | <kbd>⌘</kbd><kbd>\\</kbd> | View |
-| Show Markdown syntax | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>M</kbd> | View |
-| Full screen | <kbd>⌃</kbd><kbd>⌘</kbd><kbd>F</kbd> | View |
-| Heading 1 / 2 / 3 | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> | Format |
-| Body text | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>0</kbd> | Format |
-| Bold / Italic | <kbd>⌘</kbd><kbd>B</kbd> / <kbd>⌘</kbd><kbd>I</kbd> | Format |
-| Bulleted / Numbered list | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>8</kbd> / <kbd>⌥</kbd><kbd>⌘</kbd><kbd>7</kbd> | Format |
-| Checklist | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>9</kbd> | Format |
-| Add page | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>N</kbd> | Note |
-| Insert drawing | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>D</kbd> | Note |
-| Insert flashcards | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>F</kbd> | Note |
-| Find / Find and replace | <kbd>⌘</kbd><kbd>F</kbd> / <kbd>⌥</kbd><kbd>⌘</kbd><kbd>F</kbd> | Edit ▸ Find |
-| Settings | <kbd>⌘</kbd><kbd>,</kbd> | Whiteprint |
+| Action | macOS | Windows | Menu |
+|---|---|---|---|
+| New note | <kbd>⌘</kbd><kbd>N</kbd> | <kbd>Ctrl</kbd><kbd>N</kbd> | File |
+| New tab (new note) | <kbd>⌘</kbd><kbd>T</kbd> | | File |
+| New folder | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>N</kbd> | <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>N</kbd> | File |
+| Open… | <kbd>⌘</kbd><kbd>O</kbd> | <kbd>Ctrl</kbd><kbd>O</kbd> | File |
+| Save | | <kbd>Ctrl</kbd><kbd>S</kbd> | File |
+| Duplicate | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>S</kbd> | <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>S</kbd> | File |
+| Show in Finder / Explorer | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>R</kbd> | <kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>R</kbd> | File |
+| Settings | <kbd>⌘</kbd><kbd>,</kbd> | <kbd>Ctrl</kbd><kbd>,</kbd> | Whiteprint / File |
+| Undo / Redo | <kbd>⌘</kbd><kbd>Z</kbd> / <kbd>⇧</kbd><kbd>⌘</kbd><kbd>Z</kbd> | <kbd>Ctrl</kbd><kbd>Z</kbd> / <kbd>Ctrl</kbd><kbd>Y</kbd> | Edit |
+| Find / Find and replace | <kbd>⌘</kbd><kbd>F</kbd> / <kbd>⌥</kbd><kbd>⌘</kbd><kbd>F</kbd> | | Edit ▸ Find |
+| Command palette | <kbd>⌘</kbd><kbd>K</kbd> | <kbd>Ctrl</kbd><kbd>K</kbd> | View |
+| Toggle sidebar | <kbd>⌘</kbd><kbd>\\</kbd> | <kbd>Ctrl</kbd><kbd>\\</kbd> | View |
+| Show Markdown syntax | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>M</kbd> | <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>M</kbd> | View |
+| Full screen | <kbd>⌃</kbd><kbd>⌘</kbd><kbd>F</kbd> | <kbd>F11</kbd> | View |
+| Heading 1 / 2 / 3 | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> | <kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> | Format |
+| Body text | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>0</kbd> | <kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>0</kbd> | Format |
+| Bold / Italic | <kbd>⌘</kbd><kbd>B</kbd> / <kbd>⌘</kbd><kbd>I</kbd> | <kbd>Ctrl</kbd><kbd>B</kbd> / <kbd>Ctrl</kbd><kbd>I</kbd> | Format |
+| Bulleted / Numbered list | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>8</kbd> / <kbd>7</kbd> | <kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>8</kbd> / <kbd>7</kbd> | Format |
+| Checklist | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>9</kbd> | <kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>9</kbd> | Format |
+| Add page | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>N</kbd> | <kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>N</kbd> | Note |
+| Insert drawing | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>D</kbd> | <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>D</kbd> | Note |
+| Insert flashcards | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>F</kbd> | <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>F</kbd> | Note |
+| Minimize | <kbd>⌘</kbd><kbd>M</kbd> | <kbd>Ctrl</kbd><kbd>M</kbd> | Window |
+| Quit | <kbd>⌘</kbd><kbd>Q</kbd> | <kbd>Ctrl</kbd><kbd>Q</kbd> | Whiteprint / File |
 
 Inline code, quote, code block and divider are in the **Format** menu without a shortcut.
 **Note ▸ Study Flashcards…** and **Note ▸ Generate Study Plan…** start studying and a study plan run.
@@ -253,7 +349,7 @@ Inline code, quote, code block and divider are in the **Format** menu without a 
 <details>
 <summary><b>In the editor, the study window and popovers</b></summary>
 
-| Where | Keys |
+| Where | Keys (macOS; Windows uses <kbd>Ctrl</kbd>, <kbd>Alt</kbd>, <kbd>Enter</kbd>) |
 |---|---|
 | Lists | <kbd>↩</kbd> continue / end, <kbd>⇥</kbd> indent, <kbd>⇧</kbd><kbd>⇥</kbd> outdent |
 | `/` menu | <kbd>↑</kbd> <kbd>↓</kbd> choose, <kbd>↩</kbd> insert, <kbd>esc</kbd> close |
@@ -264,7 +360,7 @@ Inline code, quote, code block and divider are in the **Format** menu without a 
 
 </details>
 
-### Touch Bar
+### Touch Bar (macOS)
 
 On a MacBook Pro with a Touch Bar, the note window shows **Toggle Sidebar**, **Command Palette** and
 **New Note** on the left, a **Slides | A4** switch, a **Markdown** toggle and **Study** on the right. While
@@ -274,38 +370,49 @@ with **View ▸ Customize Touch Bar…**.
 
 ## Connect Claude
 
-Whiteprint ships a small helper, `whiteprint-mcp`, inside the app. Claude Code or Claude Desktop starts
-it as an MCP server; it forwards each tool call to the running app (starting the app if needed), so
-Claude's edits show up live in your open notes.
+Whiteprint ships a small helper, `whiteprint-mcp`, with the app. Claude Code or Claude Desktop starts it
+as an MCP server; it forwards each tool call to the running app (starting the app if needed), so Claude's
+edits show up live in your open notes.
 
 <img src="docs/images/settings-ai.png" width="360" align="right" alt="Settings, AI tab: study plan provider, Grok key, Claude Code status with an Add button and command, Claude Desktop with a Connect button and JSON snippet">
 
-**The easy way:** open **Whiteprint ▸ Settings… ▸ AI** and click
+**The easy way:** open **Settings… ▸ AI** (in the **Whiteprint** menu on macOS, **File** on Windows) and
+click
 
 - **Add Whiteprint to Claude Code**, which runs `claude mcp add` for your user after you confirm, or
 - **Connect Claude Desktop**, which adds Whiteprint to Claude Desktop's config (other servers are kept
   and the old file is saved as `claude_desktop_config.json.backup`). Restart Claude Desktop afterwards.
 
+<br clear="right">
+
 **By hand, Claude Code:**
 
 ```sh
+# macOS
 claude mcp add --scope user whiteprint -- /Applications/Whiteprint.app/Contents/MacOS/whiteprint-mcp
 ```
 
-**By hand, Claude Desktop:** add this to
-`~/Library/Application Support/Claude/claude_desktop_config.json`:
+```powershell
+# Windows
+claude mcp add --scope user whiteprint -- "$env:LOCALAPPDATA\Programs\Whiteprint\whiteprint-mcp.exe"
+```
 
-```json
+**By hand, Claude Desktop:** add this to `claude_desktop_config.json`
+(`~/Library/Application Support/Claude/` on macOS, `%APPDATA%\Claude\` on Windows):
+
+```jsonc
 {
   "mcpServers": {
     "whiteprint": {
+      // macOS
       "command": "/Applications/Whiteprint.app/Contents/MacOS/whiteprint-mcp"
+      // Windows: "C:\\Users\\<you>\\AppData\\Local\\Programs\\Whiteprint\\whiteprint-mcp.exe"
     }
   }
 }
 ```
 
-<br clear="right">
+A Windows all-users install lives in `C:\Program Files\Whiteprint` instead.
 
 **Try asking:**
 
@@ -367,23 +474,23 @@ come back as one line each (`line 3: unknown id 'x'`). The full grammar is in
 
 ```mermaid
 flowchart LR
-    A["PDF · DOCX · DOC · PPTX"] -->|"extracted on your Mac<br>(OCR for scanned pages)"| B["Imports<br>chunks with source refs"]
+    A["PDF · DOCX · DOC · PPTX"] -->|"extracted on your computer<br>(OCR for scanned pages)"| B["Imports<br>chunks with source refs"]
     B -->|"read_chunk → save_points"| C["Claude Code<br>or Grok"]
     C -->|"get_points → build_study_plan"| D["Study plan note<br>★ ○ ✕ · to-do · flashcards"]
     D --> E["Study Flashcards<br>spaced repetition"]
 ```
 
 1. **Import.** **File ▸ Import for Study Plan…** opens the study panel. Drop PDF, Word (`.docx`, `.doc`)
-   or PowerPoint (`.pptx`) files in. Text is extracted locally, scanned PDF pages go through OCR, and
-   repeated headers, footers and slide numbers are removed.
+   or PowerPoint (`.pptx`) files in. Text is extracted locally, scanned PDF pages go through OCR (Vision
+   on macOS, the OCR built into Windows), and repeated headers, footers and slide numbers are removed.
 2. **Generate.** Click **Generate study plan**. With **Claude Code** (the default) Whiteprint runs your
    installed, logged-in `claude` in the background, limited to Whiteprint's tools, so usage counts
    against your own subscription. With **Grok** it calls xAI's API with the key you saved in **Settings
-   ▸ AI** (kept in your Keychain). Progress streams into the panel.
-3. **Read the plan.** The finished note opens in a new tab: an overview, a learning path with study time
-   per module, every point tiered **★ must know**, **○ good to know** or **✕ can skip** with its source
-   (`Lecture3.pptx · slide 14`), a `- [ ]` to-do list of assignments and deadlines, a flashcard deck and
-   optional diagrams.
+   ▸ AI** (kept in the macOS Keychain or Windows Credential Manager). Progress streams into the panel.
+3. **Read the plan.** The finished note opens in a new tab (macOS) or window (Windows): an overview, a
+   learning path with study time per module, every point tiered **★ must know**, **○ good to know** or
+   **✕ can skip** with its source (`Lecture3.pptx · slide 14`), a `- [ ]` to-do list of assignments and
+   deadlines, a flashcard deck and optional diagrams.
 4. **Study.** **Study** on a deck (or **Note ▸ Study Flashcards…**) shows one card at a time. Rate each
    answer **Again / Hard / Good / Easy**; a small SM-2 scheduler brings cards back after 10 minutes or
    after days that grow with each success. The sidebar shows how many cards are waiting in each deck.
@@ -404,8 +511,8 @@ an interrupted run picks up where it stopped. Claude Desktop users can run the s
 </table>
 
 > [!IMPORTANT]
-> **Privacy.** Your files never leave your Mac. Only the extracted text is shared, and only with the AI
-> client you chose: your own Claude Code or Claude Desktop, or xAI with your own key. Whiteprint never
+> **Privacy.** Your files never leave your computer. Only the extracted text is shared, and only with the
+> AI client you chose: your own Claude Code or Claude Desktop, or xAI with your own key. Whiteprint never
 > sees your Claude login and makes no network requests of its own except to xAI when you pick Grok.
 > **Settings ▸ Study ▸ Clear Extracted Text Cache…** deletes every import.
 
@@ -418,9 +525,10 @@ an interrupted run picks up where it stopped. Claude Desktop users can run the s
 
 ## File format
 
-A note is one plain-text `.wprint` file (UTType `io.github.l1203012.whiteprint.note`): front matter,
-Markdown, `+++page` between pages, and fenced `wp` (drawing) and `cards` (flashcard deck) blocks. It
-diffs well, syncs with anything that syncs files, and Claude can read and edit it cheaply.
+A note is one plain-text `.wprint` file (UTType `io.github.l1203012.whiteprint.note` on macOS): front
+matter, Markdown, `+++page` between pages, and fenced `wp` (drawing) and `cards` (flashcard deck)
+blocks. It diffs well, syncs with anything that syncs files, and Claude can read and edit it cheaply.
+The format is identical on macOS and Windows.
 
 ````text
 ---
@@ -457,48 +565,59 @@ flowchart LR
         CC["Claude Code"]
         CD["Claude Desktop"]
     end
-    subgraph App["Whiteprint.app"]
+    subgraph App["Whiteprint"]
         MCP["whiteprint-mcp<br>(stdio MCP server)"]
-        WP["Whiteprint<br>(AppKit app)"]
+        WP["Whiteprint<br>(AppKit app on macOS,<br>Qt Widgets app on Windows)"]
     end
     CC -- "MCP over stdio" --> MCP
     CD -- "MCP over stdio" --> MCP
-    MCP -- "one JSON line per request<br>Unix socket<br>~/Library/Application Support/Whiteprint/mcp.sock" --> WP
-    WP -- "read / write" --> Notes[("~/Documents/Whiteprint<br>*.wprint")]
+    MCP -- "one JSON line per request<br>Unix socket (macOS) /<br>named pipe (Windows)" --> WP
+    WP -- "read / write" --> Notes[("Documents/Whiteprint<br>*.wprint")]
     WP -- "claude -p … (one-click study plans)" --> CC
     WP -. "HTTPS, your key (optional)" .-> Grok["xAI Grok API"]
 ```
 
 The app owns all state; the helper is a thin, stateless bridge that launches the app if it isn't
-running. The MCP server is a small hand-written JSON-RPC 2.0 handler, since the official Swift SDK
-needs Swift 6. Apart from the system frameworks there are no dependencies.
+running. The MCP server is a small hand-written JSON-RPC 2.0 handler. The socket is
+`~/Library/Application Support/Whiteprint/mcp.sock` on macOS and `\\.\pipe\whiteprint-<user>` on
+Windows. The Mac app has no dependencies beyond the system frameworks; the Windows app depends only on Qt,
+linked dynamically (LGPL).
 
 ```mermaid
 flowchart BT
-    Core["WhiteprintCore"]
-    Extract["WhiteprintExtract"]
-    Render["WhiteprintRender"] --> Core
-    Bridge["WhiteprintBridge"] --> Core
-    Study["WhiteprintStudy"] --> Core
+    Core["Core"]
+    Extract["Extract"]
+    Render["Render"] --> Core
+    Bridge["Bridge"] --> Core
+    Study["Study"] --> Core
     Study --> Extract
-    Editor["WhiteprintEditor"] --> Core
+    Editor["Editor"] --> Core
     Editor --> Render
-    App["WhiteprintApp"] --> Editor & Study & Bridge & Render & Extract & Core
+    App["App"] --> Editor & Study & Bridge & Render & Extract & Core
     Helper["whiteprint-mcp"] --> Bridge & Core
 ```
 
-| Module | What it does |
-|---|---|
-| `WhiteprintCore` | `.wprint` format, note editing, Markdown export, drawing language compiler, study plan model. No AppKit, so it can be reused for a Windows version. |
-| `WhiteprintExtract` | Local text extraction from PDF (with Vision OCR), DOCX/DOC and PPTX; cleaning and chunking with source refs |
-| `WhiteprintRender` | Drawing renderer, blueprint background, Markdown styling, PDF export, page thumbnails |
-| `WhiteprintEditor` | The Notion-style page editor: blocks, slash menu, drawing and deck popovers, Touch Bar |
-| `WhiteprintBridge` | MCP server, tool catalog and the Unix socket between `whiteprint-mcp` and the app |
-| `WhiteprintStudy` | Imports and saved points, study plan notes, the Claude Code and Grok runners |
-| `WhiteprintApp` | The app: documents, window and tabs, sidebar, command palette, study panel, flashcards, settings |
-| `whiteprint-mcp` | The stdio helper that Claude Code and Claude Desktop start |
+The Windows port mirrors the Swift targets one to one: each module is a Swift target under `Sources/`
+on macOS and a static library `wp_<dir>` (namespace `wp`) under `windows/` on Windows.
+
+| macOS (`Sources/`) | Windows (`windows/`) | What it does |
+|---|---|---|
+| `WhiteprintCore` | `core` | `.wprint` format, note editing, Markdown export, drawing language compiler, study plan model. No GUI code. |
+| `WhiteprintExtract` | `extract` | Local text extraction from PDF (with OCR), DOCX/DOC and PPTX; cleaning and chunking with source refs |
+| `WhiteprintRender` | `render` | Drawing renderer, blueprint background, Markdown styling, PDF export, page thumbnails |
+| `WhiteprintEditor` | `editor` | The Notion-style page editor: blocks, slash menu, drawing and deck popovers (and the Touch Bar on macOS) |
+| `WhiteprintBridge` | `bridge` | MCP server, tool catalog and the socket / pipe between `whiteprint-mcp` and the app |
+| `WhiteprintStudy` | `study` | Imports and saved points, study plan notes, the Claude Code and Grok runners |
+| `WhiteprintApp` | `app` | The app: documents, windows and tabs, sidebar, command palette, study panel, flashcards, settings |
+| `whiteprint-mcp` | `mcp` | The stdio helper that Claude Code and Claude Desktop start |
+
+How the port is laid out and what differs is in [docs/WINDOWS_PORT.md](docs/WINDOWS_PORT.md). The
+differences are platform substitutes: a named pipe for the Unix socket, Windows OCR for Vision,
+Credential Manager for the Keychain, the registry for preferences, <kbd>Ctrl</kbd> for <kbd>⌘</kbd>.
 
 ## Development
+
+### macOS
 
 **Requirements:** macOS 13+ and the Xcode **Command Line Tools** (`xcode-select --install`) with
 Swift 5.8 or later. Xcode is optional: without it, the scripts build with plain `swiftc` and run the
@@ -519,24 +638,8 @@ one with `WHITEPRINT_TEST_RUNNER=swiftpm` or `WHITEPRINT_TEST_RUNNER=shim`. With
 `swift build` and `swift test` work too. `CONFIG=release` and `ARCHS="arm64 x86_64"` make an optimised
 universal build.
 
-**Environment variables**, handy for trying things without touching your real notes:
-
-| Variable | Effect |
-|---|---|
-| `WHITEPRINT_NOTES_DIR=/tmp/notes` | Use another notes folder |
-| `WHITEPRINT_SOCKET=/tmp/wp.sock` | Use another socket, for the app and `whiteprint-mcp` |
-| `WHITEPRINT_DEFAULTS_SUITE=wp-dev` | Keep preferences in a separate defaults domain |
-| `WHITEPRINT_SCREENSHOTS=<dir>` | Run the scripted screenshot tour, save PNGs of the app's own windows into `<dir>` and quit |
-
-Run a build in isolation like this:
-
-```sh
-WHITEPRINT_NOTES_DIR=/tmp/notes WHITEPRINT_SOCKET=/tmp/wp.sock WHITEPRINT_DEFAULTS_SUITE=wp-dev \
-  .build/Whiteprint.app/Contents/MacOS/Whiteprint
-```
-
 <details>
-<summary><b>How the screenshots are made</b></summary>
+<summary><b>How the macOS screenshots are made</b></summary>
 
 `Scripts/make-screenshots.sh` builds the app, writes demo notes and course files to `/tmp/wp-shots`, and
 runs a copy of the app (with its own bundle id, socket, defaults suite and home folder, so it never
@@ -549,58 +652,101 @@ the PDF export, the drawing-language example and the DMG window. The PNGs are th
 
 </details>
 
+### Windows
+
+**Requirements:** Windows 10 or 11, Qt 6.8 for MinGW (installed to `C:\Qt`, see `windows/env.ps1`),
+CMake and Ninja. Inno Setup 6 (`winget install JRSoftware.InnoSetup`) only for the installer.
+
+```powershell
+windows\build.ps1                              # configure, build, run every module's tests (.build\windows)
+windows\build.ps1 -NoTest                      # build only
+windows\installer\package.ps1 -Version 0.1.1   # .build\windows-release\Whiteprint-0.1.1-Setup.exe + .sha256
+windows\make-screenshots.ps1                   # regenerate the images in docs\images\windows
+```
+
+Run them with `powershell -ExecutionPolicy Bypass -File <script>` if scripts are blocked. Tests are Qt
+Test executables, one per `<module>/tests/*.cpp`, driven by `ctest`; run one with
+`ctest --test-dir .build\windows -R editor`. In CI they run with `QT_QPA_PLATFORM=offscreen`.
+
+### Running in isolation
+
+These environment variables work on both platforms and are handy for trying things without touching your
+real notes:
+
+| Variable | Effect |
+|---|---|
+| `WHITEPRINT_NOTES_DIR` | Use another notes folder |
+| `WHITEPRINT_SOCKET` | Use another socket (macOS: a path) or named pipe (Windows: a name or a full `\\.\pipe\...` path), for the app and `whiteprint-mcp` |
+| `WHITEPRINT_DEFAULTS_SUITE` | Keep preferences in a separate defaults domain (macOS) or registry key (Windows) |
+| `WHITEPRINT_SCREENSHOTS=<dir>` | macOS only: run the scripted screenshot tour, save PNGs into `<dir>` and quit |
+
+```sh
+# macOS
+WHITEPRINT_NOTES_DIR=/tmp/notes WHITEPRINT_SOCKET=/tmp/wp.sock WHITEPRINT_DEFAULTS_SUITE=wp-dev \
+  .build/Whiteprint.app/Contents/MacOS/Whiteprint
+```
+
+```powershell
+# Windows
+$env:WHITEPRINT_NOTES_DIR = "C:\temp\notes"; $env:WHITEPRINT_SOCKET = "wp-test"; $env:WHITEPRINT_DEFAULTS_SUITE = "wp-dev"
+.build\windows\Whiteprint.exe
+```
+
 ## CI/CD
 
 ```mermaid
 flowchart LR
-    PR["Pull request<br>to main-macos"] --> CI
-    Push["Push to main-macos"] --> CI & Edge
+    PR["Pull request"] --> CI & WCI
+    Push["Push to main-macos"] --> CI & Edge & WCI & WEdge
     Tag["Tag vX.Y.Z[-pre]"] --> Release
+    WTag["Tag windows-vX.Y.Z[-pre]"] --> WRelease
 
-    subgraph CI["CI · ci.yml"]
-        T1["test (Apple Silicon)<br>macos-14"]
-        T2["test (Intel)<br>macos-15-intel"]
-        CLT["clt-path<br>Command Line Tools only"]
-        Lint["lint<br>ShellCheck · actionlint · check-targets"]
-        AppJob["app<br>universal debug build"]
+    subgraph Mac["macOS"]
+        CI["CI · ci.yml<br>test (Apple Silicon, Intel) · clt-path · lint · app"]
+        Edge["Edge build · edge.yml<br>DMG"]
+        Release["Release · release.yml<br>test → sign* → DMG → notarize*"]
     end
-    AppJob --> Zip["Whiteprint-app-#lt;sha#gt;.zip<br>artifact, 14 days"]
 
-    subgraph Edge["Edge build · edge.yml"]
-        DMGJob["dmg"]
+    subgraph Win["Windows"]
+        WCI["Windows CI · windows-ci.yml<br>build + ctest"]
+        WEdge["Windows Edge build · windows-edge.yml<br>installer"]
+        WRelease["Windows Release · windows-release.yml<br>build → test → Inno Setup"]
     end
-    DMGJob --> EdgeArt["Whiteprint-#lt;version#gt;-edge.#lt;run#gt;<br>DMG + .sha256, 14 days"]
 
-    subgraph Release["Release · release.yml"]
-        Build["test → sign* → DMG → notarize*"]
-    end
-    Build --> Draft["Draft GitHub release<br>DMG + .sha256 + install notes"]
+    Release --> Draft["Draft GitHub release<br>installer + .sha256 + install notes"]
+    WRelease --> Draft
 ```
 
 <sub>\* when the signing and notarization secrets are set.</sub>
 
 | Workflow | Runs on | What it does |
 |---|---|---|
-| **CI** (`ci.yml`) | Pushes and pull requests to `main-macos` | `test (Apple Silicon)` on `macos-14` and `test (Intel)` on `macos-15-intel` with SwiftPM; `clt-path` runs `Scripts/test.sh` the Command-Line-Tools way; `lint` runs ShellCheck, actionlint and `Scripts/check-targets.sh`; `app` builds a universal debug app and uploads `Whiteprint-app-<short sha>.zip` (14 days, GitHub login needed; first launch with right-click → Open). |
-| **Edge build** (`edge.yml`) | Every push to `main-macos` | Job `dmg` builds the universal DMG and uploads `Whiteprint-<version>-edge.<run number>` (DMG + `.sha256`, 14 days). No tags or releases. |
-| **Release** (`release.yml`) | `vX.Y.Z` and `vX.Y.Z-pre` tags | Tests, signs with a Developer ID and notarizes when the secrets exist, builds the DMG and checksum, and creates a **draft** release (a pre-release when the version has a `-`) whose notes are GitHub's generated notes plus the install section from `.github/release-notes.md`. Re-running updates the assets. |
+| **CI** (`ci.yml`) | Pushes and pull requests to `main-macos` | `test (Apple Silicon)` on `macos-14` and `test (Intel)` on `macos-15-intel` with SwiftPM; `clt-path` runs `Scripts/test.sh` the Command-Line-Tools way; `lint` runs ShellCheck, actionlint and `Scripts/check-targets.sh`; `app` builds a universal debug app and uploads `Whiteprint-app-<short sha>.zip` (14 days). |
+| **Edge build** (`edge.yml`) | Every push to `main-macos` | Builds the universal DMG and uploads `Whiteprint-<version>-edge.<run number>` (DMG + `.sha256`, 14 days). No tags or releases. |
+| **Release** (`release.yml`) | `vX.Y.Z` and `vX.Y.Z-pre` tags | Tests, signs with a Developer ID and notarizes when the secrets exist, builds the DMG and checksum, and creates a **draft** release whose notes include the install section from `.github/release-notes.md`. |
+| **Windows CI** (`windows-ci.yml`) | Pushes and pull requests touching `windows/` | Installs Qt 6.8 and MinGW, builds with CMake and Ninja, and runs every test with `ctest`. |
+| **Windows Edge build** (`windows-edge.yml`) | Pushes touching `windows/` | Builds the installer and uploads `Whiteprint-<version>-edge.<run number>` (Setup.exe + `.sha256`, 14 days). |
+| **Windows Release** (`windows-release.yml`) | `windows-vX.Y.Z` and `windows-vX.Y.Z-pre` tags | Builds, tests, packages the installer and creates a **draft** release with the install section from `.github/windows-release-notes.md`. If the macOS release already created the draft, the installer is uploaded to it. |
 | **Dependabot** | Weekly | Keeps the GitHub Actions used by the workflows up to date. |
 
-Bug and feature issue forms and a pull request template live in `.github/`. Cutting a release, signing
-and notarization secrets are described in [docs/RELEASING.md](docs/RELEASING.md).
+Bug and feature issue forms and a pull request template live in `.github/`. Releasing is described in
+[docs/RELEASING.md](docs/RELEASING.md) (macOS) and [docs/RELEASING_WINDOWS.md](docs/RELEASING_WINDOWS.md)
+(Windows, including the winget submission).
 
 ## Roadmap
 
-Beta 1 is deliberately small. Planned or under consideration:
+Planned or under consideration:
 
-- [ ] Developer ID signed and notarized builds, so the first-launch step goes away
+- [ ] Signed builds on both platforms (Developer ID + notarization, Authenticode), so the first-launch
+      step goes away
+- [ ] `winget install Whiteprint.Whiteprint` (submitted, waiting for the winget-pkgs merge)
 - [ ] Drawings in PDF export
 - [ ] Freehand drawing, and technical sketches with arcs and angles
-- [ ] iCloud sync
 - [ ] Images and tables in notes
-- [ ] Automatic updates (Sparkle)
+- [ ] Automatic updates (Sparkle on macOS)
+- [ ] iCloud sync
 - [ ] Day-by-day study schedules from deadlines found in course material
-- [ ] Windows 11 version, reusing `WhiteprintCore`
+- [ ] Windows ARM64 build
 
 See [docs/BETA_PLAN.md](docs/BETA_PLAN.md) for the original plan and open questions.
 
@@ -611,11 +757,13 @@ Bug reports and ideas are welcome: open an
 or feature form. For code changes:
 
 1. Fork, branch from `main-macos`, and keep the change focused.
-2. Run `Scripts/test.sh` (and `Scripts/check-targets.sh` if you added or moved a module) before pushing.
-3. Open a pull request against `main-macos`; CI runs on Intel and Apple Silicon and attaches a test
-   build of the app.
+2. Before pushing, run `Scripts/test.sh` (and `Scripts/check-targets.sh` if you added or moved a module)
+   for macOS changes, and `windows\build.ps1` for Windows changes.
+3. Open a pull request against `main-macos`; CI tests the Mac app on Intel and Apple Silicon, and the
+   Windows app when `windows/` changes.
 
-Keep `WhiteprintCore` free of AppKit, keep MCP replies short, and keep the pages blue.
+A feature should land on both platforms where it can. Keep `WhiteprintCore` / `core` free of GUI code,
+keep notes byte-compatible between the two apps, keep MCP replies short, and keep the pages blue.
 
 ## License
 
