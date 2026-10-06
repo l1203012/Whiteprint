@@ -1,4 +1,6 @@
-# Whiteprint — Beta 1 Plan (macOS only)
+# Whiteprint — Beta 1 Plan (macOS and Windows)
+
+The sections below describe the macOS app. The Windows 10/11 port is covered in [Windows](#windows) at the end.
 
 A lightweight, native macOS note-taking app with a blueprint look (blue pages, white text).
 Claude connects through MCP to write notes, draw simple diagrams cheaply, and turn course
@@ -29,7 +31,7 @@ Whiteprint.app (AppKit + SwiftUI, NSDocument-based)
 ```
 
 - **NSDocument** gives autosave, Versions, Recent Files and dirty-state handling for free.
-- **WhiteprintCore has no AppKit**, so it can be reused for a later Windows 11 version.
+- **WhiteprintCore has no AppKit**, so it was reused for the Windows version (see [Windows](#windows)).
 - **If the app isn't running**, the MCP helper starts it with `open -b`.
 
 ## 2. RAM budget
@@ -167,7 +169,7 @@ with white text**. That is a hard requirement and does not depend on light or da
 | `page.muted` | white at 65% | secondary text, placeholders |
 | `page.accent` | `#9FD3FF` | links, selection, checked boxes |
 
-**Not in Beta 1:** freehand drawing, iCloud sync, images, databases/tables, Windows.
+**Not in Beta 1:** freehand drawing, iCloud sync, images, databases/tables.
 
 ## 7. Milestones
 
@@ -274,3 +276,22 @@ Raw files never leave the Mac. The extraction cache can be cleared in Settings.
 4. Is the study agent for courses and exams only, or also work documents?
 5. Should it also make a day-by-day study schedule when it finds deadlines?
 6. Will Beta 1 testers other than you get Mode A (see the warning above)?
+
+---
+
+## Windows
+
+A native Windows 10/11 port (C++20, Qt 6.8 Widgets) lives on `main-windows` under `windows/`; the macOS
+sources are the reference. Same `.wprint` format, MCP tool names and notes layout, so notes move between the
+two unchanged. Layout and conventions: [WINDOWS_PORT.md](WINDOWS_PORT.md).
+
+- **Parity:** every Swift module has a C++ counterpart (core, extract, render, editor, bridge, study, app,
+  `whiteprint-mcp.exe`). Differences are platform substitutes: a named pipe for the Unix socket, Windows OCR
+  for Vision, Credential Manager for the Keychain, Ctrl for Cmd.
+- **Distribution:** an unsigned per-user Inno Setup installer (`Whiteprint-<version>-Setup.exe`) built by the
+  `Windows Release` workflow on every `v*` tag and attached to the GitHub Release next to the macOS DMG.
+  See [RELEASING_WINDOWS.md](RELEASING_WINDOWS.md).
+- **winget:** package `Whiteprint.Whiteprint`; manifests in `windows/installer/winget/`, submitted to
+  `microsoft/winget-pkgs` (PR #447499 for 0.1.0). Each release needs a new manifest version.
+- **Not yet:** code signing (SmartScreen warns on first run), a Windows DMG-equivalent auto-updater, and a
+  green macOS `Release` run on tags cut from `main-windows`.

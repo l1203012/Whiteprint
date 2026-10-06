@@ -35,3 +35,8 @@ library `wp_<dir>` globbed from `<dir>/*.h|*.cpp`; `<dir>/tests/*.cpp` become Qt
   Credential Manager (`CredRead/CredWrite`), Ctrl instead of Cmd.
 - Build/test: `powershell -ExecutionPolicy Bypass -File windows/build.ps1` (uses `C:\Qt` from `env.ps1`).
 - Warnings are not errors, but keep the build warning-free for your module.
+
+## Status
+- All modules ported; `windows/build.ps1` builds and passes all 39 tests.
+- 0.1.0 is released as an installer on GitHub and submitted to winget (`Whiteprint.Whiteprint`, PR #447499).
+- Open: code signing, auto-update, updating the winget manifest for each new release.
