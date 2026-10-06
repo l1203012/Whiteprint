@@ -40,8 +40,8 @@ port for Windows (`windows/`). Both read and write the same `.wprint` files, so 
 unchanged.
 
 > [!NOTE]
-> **macOS** is at **Beta 1** (`v0.1.0-beta.1`) and not notarized yet; see [first launch](#macos).
-> **Windows** is at **0.1.1** (`windows-v0.1.1`) and not code-signed yet; see [first launch](#windows).
+> **0.1.1** ships for macOS (Apple Silicon and Intel DMGs) and Windows (installer) in one release.
+> The builds are not notarized or code-signed yet; see first launch on [macOS](#macos) and [Windows](#windows).
 
 ## Contents
 
@@ -112,17 +112,21 @@ AI features need Claude Code, Claude Desktop or a Grok API key; everything else 
 
 #### 1. Download
 
-Get `Whiteprint-<version>.dmg` and `Whiteprint-<version>.dmg.sha256` from
-[**Releases**](https://github.com/l1203012/Whiteprint-Notetaking-Application/releases) (macOS releases
-are tagged `vX.Y.Z`).
+From [**Releases**](https://github.com/l1203012/Whiteprint-Notetaking-Application/releases), get the DMG
+for your Mac and its `.sha256`:
+
+- **Apple Silicon** (M1, M2, M3, …): `Whiteprint-<version>-AppleSilicon.dmg`
+- **Intel**: `Whiteprint-<version>-Intel.dmg`
+
+Apple menu → About This Mac shows which one you have. Each release also has the Windows installer.
 
 #### 2. Check the download (optional)
 
 In Terminal, in the folder you downloaded both files to:
 
 ```sh
-shasum -a 256 -c Whiteprint-0.1.0-beta.1.dmg.sha256
-# Whiteprint-0.1.0-beta.1.dmg: OK
+shasum -a 256 -c Whiteprint-0.1.1-AppleSilicon.dmg.sha256
+# Whiteprint-0.1.1-AppleSilicon.dmg: OK
 ```
 
 #### 3. Drag to Applications
@@ -192,8 +196,7 @@ winget install Whiteprint.Whiteprint
 #### 1. Download
 
 Get `Whiteprint-<version>-Setup.exe` and `Whiteprint-<version>-Setup.exe.sha256` from
-[**Releases**](https://github.com/l1203012/Whiteprint-Notetaking-Application/releases) (Windows
-releases are tagged `windows-vX.Y.Z`).
+[**Releases**](https://github.com/l1203012/Whiteprint-Notetaking-Application/releases).
 
 #### 2. Check the download (optional)
 
@@ -629,7 +632,8 @@ Scripts/build.sh                # every module and both executables
 Scripts/test.sh                 # every module's tests
 Scripts/test.sh WhiteprintApp   # one module
 Scripts/check-targets.sh        # Package.swift and Scripts/targets.sh agree
-Scripts/release.sh 0.1.0        # universal, signed .build/release/Whiteprint-0.1.0.dmg + .sha256
+Scripts/release.sh 0.1.0        # universal .build/release/Whiteprint-0.1.0.dmg + .sha256
+ARCHS=arm64 Scripts/release.sh 0.1.0    # Whiteprint-0.1.0-AppleSilicon.dmg (x86_64: -Intel.dmg)
 Scripts/make-screenshots.sh     # regenerate the images in docs/images
 ```
 
@@ -698,13 +702,13 @@ $env:WHITEPRINT_NOTES_DIR = "C:\temp\notes"; $env:WHITEPRINT_SOCKET = "wp-test";
 flowchart LR
     PR["Pull request"] --> CI & WCI
     Push["Push to main-macos"] --> CI & Edge & WCI & WEdge
-    Tag["Tag vX.Y.Z[-pre]"] --> Release
+    Tag["Tag vX.Y.Z[-pre]"] --> Release & WRelease
     WTag["Tag windows-vX.Y.Z[-pre]"] --> WRelease
 
     subgraph Mac["macOS"]
         CI["CI · ci.yml<br>test (Apple Silicon, Intel) · clt-path · lint · app"]
         Edge["Edge build · edge.yml<br>DMG"]
-        Release["Release · release.yml<br>test → sign* → DMG → notarize*"]
+        Release["Release · release.yml<br>test → sign* → DMGs (Apple Silicon, Intel) → notarize*"]
     end
 
     subgraph Win["Windows"]
@@ -723,10 +727,10 @@ flowchart LR
 |---|---|---|
 | **CI** (`ci.yml`) | Pushes and pull requests to `main-macos` | `test (Apple Silicon)` on `macos-14` and `test (Intel)` on `macos-15-intel` with SwiftPM; `clt-path` runs `Scripts/test.sh` the Command-Line-Tools way; `lint` runs ShellCheck, actionlint and `Scripts/check-targets.sh`; `app` builds a universal debug app and uploads `Whiteprint-app-<short sha>.zip` (14 days). |
 | **Edge build** (`edge.yml`) | Every push to `main-macos` | Builds the universal DMG and uploads `Whiteprint-<version>-edge.<run number>` (DMG + `.sha256`, 14 days). No tags or releases. |
-| **Release** (`release.yml`) | `vX.Y.Z` and `vX.Y.Z-pre` tags | Tests, signs with a Developer ID and notarizes when the secrets exist, builds the DMG and checksum, and creates a **draft** release whose notes include the install section from `.github/release-notes.md`. |
+| **Release** (`release.yml`) | `vX.Y.Z` and `vX.Y.Z-pre` tags | Tests, signs with a Developer ID and notarizes when the secrets exist, builds an Apple Silicon and an Intel DMG with checksums, and creates a **draft** release whose notes include the download table and install steps from `.github/release-notes.md`. Run by hand with `tag` to add DMGs to an existing release. |
 | **Windows CI** (`windows-ci.yml`) | Pushes and pull requests touching `windows/` | Installs Qt 6.8 and MinGW, builds with CMake and Ninja, and runs every test with `ctest`. |
 | **Windows Edge build** (`windows-edge.yml`) | Pushes touching `windows/` | Builds the installer and uploads `Whiteprint-<version>-edge.<run number>` (Setup.exe + `.sha256`, 14 days). |
-| **Windows Release** (`windows-release.yml`) | `windows-vX.Y.Z` and `windows-vX.Y.Z-pre` tags | Builds, tests, packages the installer and creates a **draft** release with the install section from `.github/windows-release-notes.md`. If the macOS release already created the draft, the installer is uploaded to it. |
+| **Windows Release** (`windows-release.yml`) | `vX.Y.Z` and `windows-vX.Y.Z` tags (and `-pre`) | Builds, tests and packages the installer. For a `vX.Y.Z` tag it goes into the same release as the DMGs; a `windows-vX.Y.Z` tag makes a Windows-only release with `.github/windows-release-notes.md`. |
 | **Dependabot** | Weekly | Keeps the GitHub Actions used by the workflows up to date. |
 
 Bug and feature issue forms and a pull request template live in `.github/`. Releasing is described in

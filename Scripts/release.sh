@@ -1,7 +1,11 @@
 #!/bin/bash
-# Builds a signed, universal Whiteprint.app and the install DMG for a release.
+# Builds a signed Whiteprint.app and the install DMG for a release.
 #
 #   Scripts/release.sh [version]   .build/release/Whiteprint-<version>.dmg and .dmg.sha256
+#
+#   ARCHS="arm64 x86_64"  architectures (default: both, a universal app). A single
+#                         architecture names the DMG Whiteprint-<version>-AppleSilicon.dmg
+#                         or Whiteprint-<version>-Intel.dmg; other DMGs in .build/release are kept.
 #
 # The version (a leading "v" is dropped) becomes CFBundleShortVersionString;
 # it defaults to the one in Resources/Info.plist.
@@ -21,7 +25,12 @@ VOLUME_NAME=Whiteprint
 VOLUME_ICON=${VOLUME_ICON:-$ROOT/Resources/App/AppIcon.icns}
 OUT=$ROOT/.build/release
 APP=$OUT/Whiteprint.app
-DMG=$OUT/Whiteprint-$VERSION.dmg
+ARCHS=${ARCHS:-"arm64 x86_64"}
+case "$ARCHS" in
+    arm64) KIND=AppleSilicon; DMG=$OUT/Whiteprint-$VERSION-AppleSilicon.dmg ;;
+    x86_64) KIND=Intel; DMG=$OUT/Whiteprint-$VERSION-Intel.dmg ;;
+    *) KIND=universal; DMG=$OUT/Whiteprint-$VERSION.dmg ;;
+esac
 # Window content size and icon centres; keep in sync with Scripts/make-dmg-background.swift.
 WINDOW_WIDTH=640
 WINDOW_HEIGHT=400
@@ -31,9 +40,9 @@ APPLICATIONS_SPOT="480, 205"
 step() { echo "• $*"; }
 
 build_app() {
-    step "Building universal Whiteprint.app $VERSION"
-    CONFIG=release ARCHS="arm64 x86_64" SIGN_IDENTITY=- "$ROOT/Scripts/build.sh" app
-    rm -rf "$OUT"
+    step "Building $KIND Whiteprint.app $VERSION ($ARCHS)"
+    CONFIG=release ARCHS="$ARCHS" SIGN_IDENTITY=- "$ROOT/Scripts/build.sh" app
+    rm -rf "$APP"
     mkdir -p "$OUT"
     ditto "$ROOT/.build/Whiteprint.app" "$APP"
     plutil -replace CFBundleShortVersionString -string "$VERSION" "$APP/Contents/Info.plist"

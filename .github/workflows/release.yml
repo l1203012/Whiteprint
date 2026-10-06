@@ -1,4 +1,5 @@
-# Builds the install DMG and attaches it to a draft GitHub Release.
+# Builds the install DMGs (Apple Silicon and Intel) and attaches them to a draft GitHub Release.
+# The Windows Release workflow adds the Windows installer to the same release for vX.Y.Z tags.
 # Runs for pushed vMAJOR.MINOR.PATCH[-pre] tags, or by hand from the Actions tab.
 # Signing and notarization happen only when their secrets are set; see
 # docs/RELEASING.md.
@@ -13,6 +14,10 @@ on:
         description: "Version without the v, e.g. 0.1.0-beta.2 (default: the tag, or Info.plist)"
         required: false
         type: string
+      tag:
+        description: "Attach to this existing release instead of v<version>, e.g. windows-v0.1.1"
+        required: false
+        type: string
       plain_dmg:
         description: "Skip the Finder window layout of the DMG"
         required: false
@@ -25,7 +30,7 @@ permissions:
 # One run per tag at a time; a second run for the same tag waits, then
 # replaces the first one's files instead of creating another release.
 concurrency:
-  group: release-${{ inputs.version && format('v{0}', inputs.version) || github.ref_name }}
+  group: release-${{ inputs.tag || (inputs.version && format('v{0}', inputs.version)) || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -44,6 +49,7 @@ jobs:
       - name: Version
         env:
           INPUT_VERSION: ${{ inputs.version }}
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
           if [ -n "$INPUT_VERSION" ]; then
             version=$INPUT_VERSION
@@ -67,8 +73,9 @@ jobs:
           fi
           {
             echo "VERSION=$version"
-            echo "TAG=v$version"
-            echo "DMG=Whiteprint-$version.dmg"
+            echo "TAG=${INPUT_TAG:-v$version}"
+            echo "DMG_ARM=Whiteprint-$version-AppleSilicon.dmg"
+            echo "DMG_INTEL=Whiteprint-$version-Intel.dmg"
           } >> "$GITHUB_ENV"
           echo "Whiteprint $version"
           swift --version
@@ -132,15 +139,19 @@ jobs:
             echo "NOTARY_ISSUER_ID=$NOTARY_ISSUER_ID"
           } >> "$GITHUB_ENV"
 
-      - name: Build DMG
-        run: Scripts/release.sh "$VERSION"
+      - name: Build DMGs
+        run: |
+          ARCHS=arm64 Scripts/release.sh "$VERSION"
+          ARCHS=x86_64 Scripts/release.sh "$VERSION"
 
       - uses: actions/upload-artifact@v7
         with:
           name: Whiteprint-${{ env.VERSION }}
           path: |
-            .build/release/${{ env.DMG }}
-            .build/release/${{ env.DMG }}.sha256
+            .build/release/${{ env.DMG_ARM }}
+            .build/release/${{ env.DMG_ARM }}.sha256
+            .build/release/${{ env.DMG_INTEL }}
+            .build/release/${{ env.DMG_INTEL }}.sha256
           if-no-files-found: error
           compression-level: 0
 
@@ -151,17 +162,20 @@ jobs:
         run: |
           gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
             -f tag_name="$TAG" -f target_commitish="$GITHUB_SHA" --jq .body > "$RUNNER_TEMP/generated.md"
-          sha=$(cut -d' ' -f1 < ".build/release/$DMG.sha256")
-          python3 - "$RUNNER_TEMP/generated.md" .github/release-notes.md "$sha" > "$RUNNER_TEMP/notes.md" <<'EOF'
+          python3 - "$RUNNER_TEMP/generated.md" .github/release-notes.md > "$RUNNER_TEMP/notes.md" <<'EOF'
           import os, re, sys
-          generated, template, sha = open(sys.argv[1]).read().strip(), open(sys.argv[2]).read(), sys.argv[3]
+          generated, template = open(sys.argv[1]).read().strip(), open(sys.argv[2]).read()
+          sha = lambda dmg: open(f".build/release/{dmg}.sha256").read().split()[0]
           template = re.sub(r"\A\s*<!--.*?-->\s*", "", template, flags=re.S)
           if os.environ["NOTARIZED"] == "true":
               template = re.sub(r"<!-- unsigned -->.*?<!-- /unsigned -->\n?", "", template, flags=re.S)
           else:
               template = re.sub(r"<!-- /?unsigned -->\n?", "", template)
-          values = {"VERSION": os.environ["VERSION"], "TAG": os.environ["TAG"], "DMG": os.environ["DMG"],
-                    "SHA256": sha, "REPOSITORY": os.environ["GITHUB_REPOSITORY"]}
+          arm, intel = os.environ["DMG_ARM"], os.environ["DMG_INTEL"]
+          values = {"VERSION": os.environ["VERSION"], "TAG": os.environ["TAG"], "DMG_ARM": arm,
+                    "DMG_INTEL": intel, "SHA256_ARM": sha(arm), "SHA256_INTEL": sha(intel),
+                    "SETUP": f"Whiteprint-{os.environ['VERSION']}-Setup.exe",
+                    "REPOSITORY": os.environ["GITHUB_REPOSITORY"]}
           template = re.sub(r"\{\{(\w+)\}\}", lambda m: values[m.group(1)], template)
           print(generated + "\n\n" + template.strip())
           EOF
@@ -174,7 +188,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          files=(".build/release/$DMG" ".build/release/$DMG.sha256")
+          files=(".build/release/$DMG_ARM" ".build/release/$DMG_ARM.sha256"
+                 ".build/release/$DMG_INTEL" ".build/release/$DMG_INTEL.sha256")
           prerelease=false
           case "$VERSION" in *-*) prerelease=true ;; esac
           notes="$RUNNER_TEMP/notes.md"
