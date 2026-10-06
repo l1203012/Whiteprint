@@ -97,16 +97,24 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           tag="v$VERSION"
-          files=(".build/windows-release/Whiteprint-$VERSION-Setup.exe" ".build/windows-release/Whiteprint-$VERSION-Setup.exe.sha256")
+          setup="Whiteprint-$VERSION-Setup.exe"
+          files=(".build/windows-release/$setup" ".build/windows-release/$setup.sha256")
+          sha=$(cut -d' ' -f1 < ".build/windows-release/$setup.sha256")
+          # Install section from .github/windows-release-notes.md (the leading HTML comment is dropped).
+          sed -e '/^<!--$/,/^-->$/d' \
+              -e "s|{{VERSION}}|$VERSION|g" -e "s|{{SETUP}}|$setup|g" \
+              -e "s|{{SHA256}}|$sha|g" -e "s|{{REPOSITORY}}|$REPOSITORY|g" \
+              .github/windows-release-notes.md > "$RUNNER_TEMP/notes.md"
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" "${files[@]}" --clobber
           else
             prerelease=()
             case "$VERSION" in *-*) prerelease=(--prerelease) ;; esac
             # If the macOS workflow created the draft in the meantime, create fails: upload instead.
-            gh release create "$tag" "${files[@]}" --draft --generate-notes \
+            gh release create "$tag" "${files[@]}" --draft --generate-notes --notes-file "$RUNNER_TEMP/notes.md" \
               --title "Whiteprint $VERSION" --target "$GITHUB_SHA" "${prerelease[@]}" \
               || gh release upload "$tag" "${files[@]}" --clobber
           fi

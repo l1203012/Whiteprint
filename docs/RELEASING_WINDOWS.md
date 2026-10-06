@@ -40,3 +40,34 @@ and optional desktop shortcuts, and registers the `.wprint` file type with the a
 
 `python windows/installer/make_assets.py` (needs `pip install --user Pillow`) rebuilds `windows/app/AppIcon.ico`
 from `Resources/App/AppIcon.icns` and the wizard bitmaps in `windows/installer/`.
+
+## Workflows
+
+| Workflow | Trigger | Result |
+|---|---|---|
+| `windows-ci.yml` | push or pull request touching `windows/` | build + `ctest` on `windows-latest` |
+| `windows-edge.yml` | every push to `main-windows` | installer artifact `Whiteprint-<version>-edge.<run>`, kept 14 days, no release |
+| `windows-release.yml` | `v*` tag or manual run | installer + `.sha256` on the draft GitHub Release |
+
+Edge builds are for trying a change before it is released: open the run, download the artifact (a GitHub
+login is needed), unzip and run `Whiteprint-<version>-edge.<run>-Setup.exe`.
+
+The release notes are GitHub's generated notes followed by the install section in
+`.github/windows-release-notes.md`; `{{VERSION}}`, `{{SETUP}}`, `{{SHA256}}` and `{{REPOSITORY}}` are filled in by
+the workflow. Edit that file to change the text.
+
+## Publish to winget
+
+The manifests live in `windows/installer/winget/manifests/w/Whiteprint/Whiteprint/<version>/` (package
+`Whiteprint.Whiteprint`, installer type `inno`, per user). For every published release:
+
+1. Copy the previous version's folder to `<new version>` and set `PackageVersion` in the three files.
+2. In the installer manifest set `InstallerUrl` to the release asset and `InstallerSha256` to the SHA-256
+   of that exact file (`Get-FileHash`, or the `.sha256` asset; use the one from the **published** release,
+   since a rebuilt installer has a different hash).
+3. `winget validate <folder>`.
+4. Fork `microsoft/winget-pkgs`, add the folder under `manifests/w/Whiteprint/Whiteprint/`, and open a pull
+   request titled `New version: Whiteprint.Whiteprint version <version>`. A bot validates the installer;
+   a reviewer merges it, usually within a few days.
+
+0.1.0 was submitted as [microsoft/winget-pkgs#447499](https://github.com/microsoft/winget-pkgs/pull/447499).

@@ -1,0 +1,74 @@
+name: Bug report
+description: Something in Whiteprint doesn't work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Please check the [open issues](https://github.com/l1203012/Whiteprint/issues) first, in case it is already known.
+
+  - type: input
+    id: whiteprint-version
+    attributes:
+      label: Whiteprint version
+      description: The name of the installer you ran (e.g. 0.1.0, or 0.1.0-edge.42).
+      placeholder: 0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: windows-version
+    attributes:
+      label: Windows version
+      description: Settings → System → About, or run `winver`.
+      placeholder: Windows 11 23H2
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: How did you install it?
+      options:
+        - Setup.exe from a GitHub release
+        - winget
+        - Edge build (workflow artifact)
+        - Built from source
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What did you do? Small example notes help a lot.
+      placeholder: |
+        1. Create a note with …
+        2. Switch to …
+        3. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: What happened instead? Screenshots and error messages are welcome.
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: How often it happens, whether it started with a particular version, workarounds you found.
+    validations:
+      required: false

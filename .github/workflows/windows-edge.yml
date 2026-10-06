@@ -1,0 +1,101 @@
+# Builds the installer for every push to main-windows, versioned <CMake version>-edge.<run number>,
+# and keeps it as a workflow artifact for 14 days. Creates no tags or releases.
+name: Windows Edge build
+
+on:
+  push:
+    branches: [main-windows]
+    paths: ["windows/**", ".github/workflows/windows-edge.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Only the newest commit's build matters.
+concurrency:
+  group: windows-edge-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  installer:
+    name: installer
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version
+        shell: bash
+        run: |
+          base=$(sed -n 's/^project(Whiteprint VERSION \([0-9.]*\).*/\1/p' windows/CMakeLists.txt)
+          version="$base-edge.$GITHUB_RUN_NUMBER"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "Whiteprint $version"
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: 6.8.3
+          host: windows
+          target: desktop
+          arch: win64_mingw
+          modules: qtpdf
+          tools: tools_mingw1310
+          cache: true
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Get-Command ISCC.exe -ErrorAction SilentlyContinue) -and
+              -not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup --no-progress -y
+          }
+
+      - name: Build
+        shell: pwsh
+        run: |
+          $mingw = (Get-ChildItem "$env:IQTA_TOOLS" -Directory -Filter "mingw*" | Select-Object -First 1).FullName
+          $env:PATH = "$mingw\bin;$env:PATH"
+          cmake -S windows -B build -G Ninja -DCMAKE_BUILD_TYPE=Release "-DWP_VERSION=$env:VERSION" `
+            -DCMAKE_C_COMPILER="$mingw\bin\gcc.exe" -DCMAKE_CXX_COMPILER="$mingw\bin\g++.exe"
+          cmake --build build
+
+      - name: Package installer
+        shell: pwsh
+        run: |
+          $mingw = (Get-ChildItem "$env:IQTA_TOOLS" -Directory -Filter "mingw*" | Select-Object -First 1).FullName
+          $env:PATH = "$mingw\bin;$env:PATH"
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6"
+          if (Test-Path $iscc) { $env:PATH = "$iscc;$env:PATH" }
+          powershell -ExecutionPolicy Bypass -File windows/installer/package.ps1 -Version $env:VERSION -BuildDir build
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Whiteprint-${{ env.VERSION }}
+          path: |
+            .build/windows-release/Whiteprint-${{ env.VERSION }}-Setup.exe
+            .build/windows-release/Whiteprint-${{ env.VERSION }}-Setup.exe.sha256
+          retention-days: 14
+          if-no-files-found: error
+          # An installer is already compressed.
+          compression-level: 0
+
+      - name: Summary
+        shell: bash
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          sha=$(cut -d' ' -f1 < ".build/windows-release/Whiteprint-$VERSION-Setup.exe.sha256")
+          {
+            echo "### Whiteprint $VERSION (edge build)"
+            echo
+            echo "An untested build of \`${GITHUB_SHA:0:7}\` on \`main-windows\`, for 64-bit Windows 10 and 11."
+            echo "It is unsigned and kept for 14 days."
+            echo
+            echo "1. Download **Whiteprint-$VERSION** under *Artifacts* on [this run]($RUN_URL)"
+            echo "   (you need to be signed in to GitHub) and unzip it."
+            echo "2. Run \`Whiteprint-$VERSION-Setup.exe\`. If SmartScreen warns, click **More info**, then **Run anyway**."
+            echo
+            echo "SHA-256: \`$sha\`"
+          } >> "$GITHUB_STEP_SUMMARY"

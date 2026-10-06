@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Download Whiteprint
+    url: https://github.com/l1203012/Whiteprint/releases
+    about: Installers for every release, with install and first-launch instructions.
