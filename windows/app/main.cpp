@@ -20,6 +20,7 @@ int main(int argc, char *argv[])
     QApplication::setOrganizationName(QStringLiteral("Whiteprint"));
     QApplication::setOrganizationDomain(QStringLiteral("whiteprint.app"));
     QApplication::setApplicationName(QStringLiteral("Whiteprint"));
+    QApplication::setApplicationDisplayName(QStringLiteral("Whiteprint")); // appended to every window title
     QApplication::setApplicationVersion(QStringLiteral(WP_VERSION));
     QApplication app(argc, argv);
 
