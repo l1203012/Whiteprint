@@ -3,10 +3,10 @@ name: Windows CI
 
 on:
   push:
-    branches: [main-windows, main-macos, windows-cpp]
+    branches: [main-windows, main, windows-cpp]
     paths: ["windows/**", ".github/workflows/windows-ci.yml"]
   pull_request:
-    branches: [main-windows, main-macos]
+    branches: [main-windows, main]
     paths: ["windows/**", ".github/workflows/windows-ci.yml"]
 
 jobs:

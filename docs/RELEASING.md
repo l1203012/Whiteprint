@@ -4,8 +4,8 @@ Everything runs in GitHub Actions on GitHub-hosted Macs. Three workflows cover i
 
 | Workflow | File | Runs on | Produces |
 |---|---|---|---|
-| **CI** | `.github/workflows/ci.yml` | pushes and pull requests to `main-macos`, or by hand | test results, lint, a zipped app build per commit |
-| **Edge build** | `.github/workflows/edge.yml` | pushes to `main-macos`, or by hand | an install DMG per commit, kept 14 days |
+| **CI** | `.github/workflows/ci.yml` | pushes and pull requests to `main`, or by hand | test results, lint, a zipped app build per commit |
+| **Edge build** | `.github/workflows/edge.yml` | pushes to `main`, or by hand | an install DMG per commit, kept 14 days |
 | **Release** | `.github/workflows/release.yml` | pushed `v*` tags, or by hand | a draft GitHub Release with the DMG and its checksum |
 
 Dependabot (`.github/dependabot.yml`) opens one grouped pull request a week when the actions the
@@ -46,11 +46,11 @@ workflows use have new versions.
   It is a debug build for both architectures, ad-hoc signed; open it with right-click → **Open**
   the first time. Downloading artifacts needs a GitHub account.
 - **Cancelling.** A new push to a pull request cancels the older runs for it. Runs for pushes to
-  `main-macos` are never cancelled, so every commit there gets a result.
+  `main` are never cancelled, so every commit there gets a result.
 
 ### Branch protection (recommended)
 
-Under **Settings → Branches** (or **Rules → Rulesets**), protect `main-macos` and require these
+Under **Settings → Branches** (or **Rules → Rulesets**), protect `main` and require these
 status checks before merging; they appear in the list once CI has run on a pull request:
 
 - `CI / test (Apple Silicon)`
@@ -64,7 +64,7 @@ date. The Edge build and Release workflows don't run on pull requests, so don't 
 
 ## Edge builds
 
-Every push to `main-macos` also runs **Edge build**, which builds the universal install DMG with
+Every push to `main` also runs **Edge build**, which builds the universal install DMG with
 `Scripts/release.sh` as version `<Info.plist version>-edge.<run number>`, e.g.
 `0.1.0-beta.1-edge.42`. The DMG and its `.sha256` are uploaded as the artifact
 `Whiteprint-<version>` (kept 14 days), and the run summary has download and install steps. It

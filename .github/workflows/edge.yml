@@ -1,11 +1,11 @@
-# Builds the install DMG for every push to main-macos, versioned
+# Builds the install DMG for every push to main, versioned
 # <Info.plist version>-edge.<run number>, and keeps it as a workflow artifact
 # for 14 days. Creates no tags or releases; see docs/RELEASING.md.
 name: Edge build
 
 on:
   push:
-    branches: [main-macos]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -60,7 +60,7 @@ jobs:
           {
             echo "### Whiteprint $VERSION (edge build)"
             echo
-            echo "An untested build of \`${GITHUB_SHA:0:7}\` on \`main-macos\`, for Intel and Apple Silicon Macs"
+            echo "An untested build of \`${GITHUB_SHA:0:7}\` on \`main\`, for Intel and Apple Silicon Macs"
             echo "running macOS 13 or later. It is ad-hoc signed and kept for 14 days."
             echo
             echo "1. Download **Whiteprint-$VERSION** under *Artifacts* on [this run]($RUN_URL)"

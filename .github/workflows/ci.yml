@@ -5,15 +5,15 @@ name: CI
 
 on:
   push:
-    branches: [main-macos]
+    branches: [main]
   pull_request:
-    branches: [main-macos]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# A new push to a pull request cancels its older runs; pushes to main-macos
+# A new push to a pull request cancels its older runs; pushes to main
 # each get their own group, so none of them is cancelled or skipped.
 concurrency:
   group: ${{ github.event_name == 'pull_request' && format('ci-pr-{0}', github.event.pull_request.number) || format('ci-run-{0}', github.run_id) }}

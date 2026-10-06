@@ -6,7 +6,7 @@
 
 **Blueprint-style notes for macOS and Windows, with Claude drawing your diagrams.**
 
-[![macOS CI](https://github.com/l1203012/Whiteprint-Notetaking-Application/actions/workflows/ci.yml/badge.svg?branch=main-macos)](https://github.com/l1203012/Whiteprint-Notetaking-Application/actions/workflows/ci.yml)
+[![macOS CI](https://github.com/l1203012/Whiteprint-Notetaking-Application/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/l1203012/Whiteprint-Notetaking-Application/actions/workflows/ci.yml)
 [![Windows CI](https://github.com/l1203012/Whiteprint-Notetaking-Application/actions/workflows/windows-ci.yml/badge.svg)](https://github.com/l1203012/Whiteprint-Notetaking-Application/actions/workflows/windows-ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/l1203012/Whiteprint-Notetaking-Application?include_prereleases&sort=semver&label=release)](https://github.com/l1203012/Whiteprint-Notetaking-Application/releases)
 [![Downloads](https://img.shields.io/github/downloads/l1203012/Whiteprint-Notetaking-Application/total)](https://github.com/l1203012/Whiteprint-Notetaking-Application/releases)
@@ -701,7 +701,7 @@ $env:WHITEPRINT_NOTES_DIR = "C:\temp\notes"; $env:WHITEPRINT_SOCKET = "wp-test";
 ```mermaid
 flowchart LR
     PR["Pull request"] --> CI & WCI
-    Push["Push to main-macos"] --> CI & Edge & WCI & WEdge
+    Push["Push to main"] --> CI & Edge & WCI & WEdge
     Tag["Tag vX.Y.Z[-pre]"] --> Release & WRelease
     WTag["Tag windows-vX.Y.Z[-pre]"] --> WRelease
 
@@ -725,8 +725,8 @@ flowchart LR
 
 | Workflow | Runs on | What it does |
 |---|---|---|
-| **CI** (`ci.yml`) | Pushes and pull requests to `main-macos` | `test (Apple Silicon)` on `macos-14` and `test (Intel)` on `macos-15-intel` with SwiftPM; `clt-path` runs `Scripts/test.sh` the Command-Line-Tools way; `lint` runs ShellCheck, actionlint and `Scripts/check-targets.sh`; `app` builds a universal debug app and uploads `Whiteprint-app-<short sha>.zip` (14 days). |
-| **Edge build** (`edge.yml`) | Every push to `main-macos` | Builds the universal DMG and uploads `Whiteprint-<version>-edge.<run number>` (DMG + `.sha256`, 14 days). No tags or releases. |
+| **CI** (`ci.yml`) | Pushes and pull requests to `main` | `test (Apple Silicon)` on `macos-14` and `test (Intel)` on `macos-15-intel` with SwiftPM; `clt-path` runs `Scripts/test.sh` the Command-Line-Tools way; `lint` runs ShellCheck, actionlint and `Scripts/check-targets.sh`; `app` builds a universal debug app and uploads `Whiteprint-app-<short sha>.zip` (14 days). |
+| **Edge build** (`edge.yml`) | Every push to `main` | Builds the universal DMG and uploads `Whiteprint-<version>-edge.<run number>` (DMG + `.sha256`, 14 days). No tags or releases. |
 | **Release** (`release.yml`) | `vX.Y.Z` and `vX.Y.Z-pre` tags | Tests, signs with a Developer ID and notarizes when the secrets exist, builds an Apple Silicon and an Intel DMG with checksums, and creates a **draft** release whose notes include the download table and install steps from `.github/release-notes.md`. Run by hand with `tag` to add DMGs to an existing release. |
 | **Windows CI** (`windows-ci.yml`) | Pushes and pull requests touching `windows/` | Installs Qt 6.8 and MinGW, builds with CMake and Ninja, and runs every test with `ctest`. |
 | **Windows Edge build** (`windows-edge.yml`) | Pushes touching `windows/` | Builds the installer and uploads `Whiteprint-<version>-edge.<run number>` (Setup.exe + `.sha256`, 14 days). |
@@ -760,10 +760,10 @@ Bug reports and ideas are welcome: open an
 [issue](https://github.com/l1203012/Whiteprint-Notetaking-Application/issues/new/choose) with the bug
 or feature form. For code changes:
 
-1. Fork, branch from `main-macos`, and keep the change focused.
+1. Fork, branch from `main`, and keep the change focused.
 2. Before pushing, run `Scripts/test.sh` (and `Scripts/check-targets.sh` if you added or moved a module)
    for macOS changes, and `windows\build.ps1` for Windows changes.
-3. Open a pull request against `main-macos`; CI tests the Mac app on Intel and Apple Silicon, and the
+3. Open a pull request against `main`; CI tests the Mac app on Intel and Apple Silicon, and the
    Windows app when `windows/` changes.
 
 A feature should land on both platforms where it can. Keep `WhiteprintCore` / `core` free of GUI code,

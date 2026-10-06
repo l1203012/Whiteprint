@@ -4,7 +4,7 @@ name: Windows Edge build
 
 on:
   push:
-    branches: [main-windows, main-macos]
+    branches: [main-windows, main]
     paths: ["windows/**", ".github/workflows/windows-edge.yml"]
   workflow_dispatch:
 
