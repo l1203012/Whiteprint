@@ -39,7 +39,7 @@ This is the Windows version. The macOS version lives on the
 same `.wprint` files, so notes move between them unchanged.
 
 > [!NOTE]
-> **Version 0.1.0** is Windows 10 and 11 (64-bit) and not code-signed yet. See [first launch](#3-first-launch-of-an-unsigned-installer).
+> **Version 0.1.1** is Windows 10 and 11 (64-bit) and not code-signed yet. See [first launch](#3-first-launch-of-an-unsigned-installer).
 
 ## Contents
 
@@ -539,7 +539,7 @@ $env:WHITEPRINT_NOTES_DIR = "C:\temp\notes"; $env:WHITEPRINT_SOCKET = "wp-test";
 flowchart LR
     PR["Pull request<br>to main-windows"] --> CI
     Push["Push to main-windows"] --> CI & Edge
-    Tag["Tag vX.Y.Z[-pre]"] --> Release
+    Tag["Tag windows-vX.Y.Z[-pre]"] --> Release
 
     subgraph CI["Windows CI · windows-ci.yml"]
         T1["build<br>build + ctest"]
@@ -560,7 +560,7 @@ flowchart LR
 |---|---|---|
 | **Windows CI** (`windows-ci.yml`) | Pushes and pull requests touching `windows/` | Installs Qt 6.8 and MinGW, builds with CMake and Ninja, and runs every test with `ctest`. |
 | **Windows Edge build** (`windows-edge.yml`) | Every push to `main-windows` | Job `installer` builds the installer and uploads `Whiteprint-<version>-edge.<run number>` (Setup.exe + `.sha256`, 14 days). No tags or releases. |
-| **Windows Release** (`windows-release.yml`) | `vX.Y.Z` and `vX.Y.Z-pre` tags | Builds, tests, packages the installer and creates a **draft** release (a pre-release when the version has a `-`) whose notes are GitHub's generated notes plus the install section from `.github/windows-release-notes.md`. If the macOS `Release` workflow already created the draft, the installer is uploaded to it. |
+| **Windows Release** (`windows-release.yml`) | `windows-vX.Y.Z` and `windows-vX.Y.Z-pre` tags | Builds, tests, packages the installer and creates a **draft** release (a pre-release when the version has a `-`) whose notes are GitHub's generated notes plus the install section from `.github/windows-release-notes.md`. If the macOS `Release` workflow already created the draft, the installer is uploaded to it. |
 | **Dependabot** | Weekly | Keeps the GitHub Actions used by the workflows up to date. |
 
 Bug and feature issue forms and a pull request template live in `.github/`. Cutting a release and the

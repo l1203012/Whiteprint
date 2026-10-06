@@ -1,10 +1,10 @@
-# Builds the Windows installer and attaches it to the draft GitHub Release shared with the macOS DMG
-# (release.yml). Whichever workflow runs first creates the draft; the other uploads to it.
+# Builds the Windows installer and publishes it as a draft GitHub Release tagged windows-v<version>,
+# separate from the macOS releases (v<version>, release.yml).
 name: Windows Release
 
 on:
   push:
-    tags: ["v*"]
+    tags: ["windows-v*"]
   workflow_dispatch:
     inputs:
       version:
@@ -38,6 +38,7 @@ jobs:
           else
             version=$(sed -n 's/^project(Whiteprint VERSION \([0-9.]*\).*/\1/p' windows/CMakeLists.txt)
           fi
+          version=${version#windows-}
           version=${version#v}
           echo "VERSION=$version" >> "$GITHUB_ENV"
           echo "Whiteprint $version"
@@ -99,7 +100,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPOSITORY: ${{ github.repository }}
         run: |
-          tag="v$VERSION"
+          tag="windows-v$VERSION"
           setup="Whiteprint-$VERSION-Setup.exe"
           files=(".build/windows-release/$setup" ".build/windows-release/$setup.sha256")
           sha=$(cut -d' ' -f1 < ".build/windows-release/$setup.sha256")
@@ -115,6 +116,6 @@ jobs:
             case "$VERSION" in *-*) prerelease=(--prerelease) ;; esac
             # If the macOS workflow created the draft in the meantime, create fails: upload instead.
             gh release create "$tag" "${files[@]}" --draft --generate-notes --notes-file "$RUNNER_TEMP/notes.md" \
-              --title "Whiteprint $VERSION" --target "$GITHUB_SHA" "${prerelease[@]}" \
+              --title "Whiteprint $VERSION (Windows)" --target "$GITHUB_SHA" "${prerelease[@]}" \
               || gh release upload "$tag" "${files[@]}" --clobber
           fi

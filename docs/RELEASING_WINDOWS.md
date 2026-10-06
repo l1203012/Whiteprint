@@ -1,20 +1,19 @@
 # Releasing Whiteprint for Windows
 
-The Windows installer ships on the same GitHub Release as the macOS DMG (see `docs/RELEASING.md`).
+Windows releases are separate from the macOS ones: the tag is `windows-v<version>` (macOS uses `v<version>`),
+so each platform has its own GitHub Release and a failing macOS run never blocks a Windows release.
 
-## Cut a release with both artifacts
+## Cut a Windows release
 
-1. Make sure the version you want is on the commit you tag (the macOS workflow reads `Resources/Info.plist`
-   for manual runs; the Windows project version lives in `windows/CMakeLists.txt`).
-2. Push a tag: `git tag v0.1.0-beta.2 && git push origin v0.1.0-beta.2`.
-3. Two workflows start: `Release` (macOS DMG) and `Windows Release` (installer). Each builds and tests, then
-   runs `gh release create v<version> --draft` if the release does not exist yet, otherwise
-   `gh release upload --clobber`. If both race to create it, the loser falls back to upload. Versions
-   containing `-` are marked prerelease.
-4. When both jobs are green, the draft `v<version>` holds `Whiteprint-<version>.dmg(.sha256)` and
-   `Whiteprint-<version>-Setup.exe(.sha256)`. Review the notes and publish the draft.
+1. Set the version in `windows/CMakeLists.txt` (`project(Whiteprint VERSION x.y.z ...)`) and commit it.
+2. Push a tag: `git tag windows-v0.1.1 && git push origin windows-v0.1.1`.
+3. The `Windows Release` workflow builds, tests, packages the installer and runs
+   `gh release create windows-v<version> --draft` (or uploads to it if it exists). Versions containing `-`
+   are marked prerelease.
+4. The draft holds `Whiteprint-<version>-Setup.exe` and `.sha256`. Review the notes, publish the draft
+   (`gh release edit windows-v<version> --draft=false --latest`), then submit the winget manifest (below).
 
-Either workflow can also be run by hand from the Actions tab (`workflow_dispatch`, optional `version`).
+The workflow can also be run by hand from the Actions tab (`workflow_dispatch`, optional `version`).
 
 The installer is unsigned, so SmartScreen warns on first run ("More info" then "Run anyway"). Code signing
 is not wired up yet.
@@ -47,7 +46,7 @@ from `Resources/App/AppIcon.icns` and the wizard bitmaps in `windows/installer/`
 |---|---|---|
 | `windows-ci.yml` | push or pull request touching `windows/` | build + `ctest` on `windows-latest` |
 | `windows-edge.yml` | every push to `main-windows` | installer artifact `Whiteprint-<version>-edge.<run>`, kept 14 days, no release |
-| `windows-release.yml` | `v*` tag or manual run | installer + `.sha256` on the draft GitHub Release |
+| `windows-release.yml` | `windows-v*` tag or manual run | installer + `.sha256` on the draft GitHub Release |
 
 Edge builds are for trying a change before it is released: open the run, download the artifact (a GitHub
 login is needed), unzip and run `Whiteprint-<version>-edge.<run>-Setup.exe`.
