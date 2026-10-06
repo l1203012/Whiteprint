@@ -83,6 +83,8 @@ protected:
 
 private:
     void buildToolbar(QWidget *container);
+    void applyToolbarColors();
+    QWidget *m_toolbar = nullptr;
     void documentChanged(int origin);
     void visiblePageChanged(int page);
     void study(const CardDeck &deck);

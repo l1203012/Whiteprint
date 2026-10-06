@@ -24,7 +24,7 @@
 
 <br>
 
-<img src="docs/images/main.png" alt="Whiteprint: a note with a heading, a request-flow diagram and a checklist on a blue blueprint page, with the folder tree in the sidebar and three tabs">
+<img src="docs/images/main.png" alt="Whiteprint: a note with a heading, a request-flow diagram and a checklist on a blue blueprint page, with the folder tree and the page list in the sidebar">
 
 </div>
 
@@ -65,7 +65,7 @@ same `.wprint` files, so notes move between them unchanged.
 | 🎓 **Study plans** | PDF, Word and PowerPoint in; a note with ★ must-know / ○ good-to-know / ✕ skip tiers, a learning path, a to-do list and flashcards out. |
 | 🗂️ **Flashcards** | Decks live inside notes. Study them with spaced repetition (Again / Hard / Good / Easy). |
 | 📄 **Export** | PDF on blueprint paper with a title block, PDF for printing, or plain Markdown. |
-| 🗃️ **Tabs and folders** | Notes are plain `.wprint` files in `Documents\Whiteprint`, in folders as deep as you like, opened as tabs. |
+| 🗃️ **Folders and windows** | Notes are plain `.wprint` files in `Documents\Whiteprint`, in folders as deep as you like; each open note gets its own window. |
 | ⌨️ **Keyboard first** | <kbd>Ctrl</kbd><kbd>K</kbd> command palette and a shortcut for every format. |
 | 🪶 **Light** | Native Qt Widgets, no Electron, no web view. Scanned PDFs are read with the OCR that ships with Windows. |
 
@@ -193,9 +193,9 @@ Grok key. Your notes in `Documents\Whiteprint` are yours to keep or delete.
 
 Switch with **View ▸ Page Layout**. The setting applies to every open note.
 
-### Tabs, folders and the sidebar
+### Windows, folders and the sidebar
 
-Notes open as tabs of one window. The sidebar has three sections:
+Each note opens in its own window. The sidebar has three sections:
 
 - **Notes:** the notes folder as a tree. <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>N</kbd> creates a folder in the
   selected one; drag notes between folders; right-click to rename, show in Explorer or move to the
@@ -377,7 +377,7 @@ flowchart LR
    installed, logged-in `claude` in the background, limited to Whiteprint's tools, so usage counts
    against your own subscription. With **Grok** it calls xAI's API with the key you saved in **Settings
    ▸ AI** (kept in Windows Credential Manager). Progress streams into the panel.
-3. **Read the plan.** The finished note opens in a new tab: an overview, a learning path with study time
+3. **Read the plan.** The finished note opens in a new window: an overview, a learning path with study time
    per module, every point tiered **★ must know**, **○ good to know** or **✕ can skip** with its source
    (`Lecture3.pptx · slide 14`), a `- [ ]` to-do list of assignments and deadlines, a flashcard deck and
    optional diagrams.
@@ -495,7 +495,7 @@ modules mirror the Swift targets of the macOS app one to one.
 | `editor` | The Notion-style page editor: blocks, slash menu, drawing and deck popovers |
 | `bridge` | MCP server, tool catalog and the named pipe between `whiteprint-mcp` and the app |
 | `study` | Imports and saved points, study plan notes, the Claude Code and Grok runners |
-| `app` | The app: documents, window and tabs, sidebar, command palette, study panel, flashcards, settings |
+| `app` | The app: documents, note windows, sidebar, command palette, study panel, flashcards, settings |
 | `mcp` | The stdio helper that Claude Code and Claude Desktop start |
 
 How the port is laid out and what differs from macOS is in [docs/WINDOWS_PORT.md](docs/WINDOWS_PORT.md).

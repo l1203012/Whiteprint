@@ -311,14 +311,10 @@ bool NoteWindow::hasFile() const
 
 // MARK: Toolbar
 
-void NoteWindow::buildToolbar(QWidget *container)
+void NoteWindow::applyToolbarColors()
 {
     const auto c = mac::colors();
-    auto *layout = new QHBoxLayout(container);
-    layout->setContentsMargins(10, 0, 12, 1);
-    layout->setSpacing(6);
-
-    container->setStyleSheet(QStringLiteral(
+    m_toolbar->setStyleSheet(QStringLiteral(
         "QToolButton { border: none; border-radius: 6px; padding: 4px 6px; background: transparent; color: %1; }"
         "QToolButton:hover { background: %2; }"
         "QToolButton:pressed { background: %3; }"
@@ -331,6 +327,24 @@ void NoteWindow::buildToolbar(QWidget *container)
                                  .arg(c.text.name(), alpha(c.text, 0.08).name(QColor::HexArgb), alpha(c.text, 0.14).name(QColor::HexArgb),
                                       c.accent.name(), c.selectionText.name(), mac::isDark() ? c.control.name() : QStringLiteral("#ffffff"),
                                       c.controlBorder.name()));
+    if (m_sidebarButton)
+        m_sidebarButton->setIcon(sidebarIcon(c.secondaryText));
+    if (m_moreButton)
+        m_moreButton->setIcon(ellipsisIcon(c.secondaryText));
+    if (m_split)
+        m_split->setStyleSheet(QStringLiteral("QSplitter::handle { background: %1; }").arg(c.separator.name()));
+}
+
+void NoteWindow::buildToolbar(QWidget *container)
+{
+    const auto c = mac::colors();
+    auto *layout = new QHBoxLayout(container);
+    layout->setContentsMargins(10, 0, 12, 1);
+    layout->setSpacing(6);
+
+    m_toolbar = container;
+    applyToolbarColors();
+
 
     m_sidebarButton = new QToolButton;
     m_sidebarButton->setIcon(sidebarIcon(c.secondaryText));
@@ -725,6 +739,9 @@ void NoteWindow::saveGeometryNow()
 void NoteWindow::changeEvent(QEvent *event)
 {
     QMainWindow::changeEvent(event);
+    // A live Windows light/dark switch: the toolbar's stylesheet and icons hold the old colours.
+    if (event->type() == QEvent::PaletteChange && m_toolbar)
+        applyToolbarColors();
     if (event->type() == QEvent::ActivationChange) {
         m_sidebar->tree()->viewport()->update();
         if (isActiveWindow()) {
