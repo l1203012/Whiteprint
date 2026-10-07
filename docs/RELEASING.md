@@ -112,7 +112,46 @@ To change the install instructions in every release, edit `.github/release-notes
 `{{VERSION}}`, `{{TAG}}`, `{{DMG}}`, `{{SHA256}}` and `{{REPOSITORY}}`; the part between the
 `<!-- unsigned -->` markers only appears in builds that aren't notarized.
 
-## Building a DMG locally
+## In-app updates
+
+Each time Whiteprint starts, its launch screen checks GitHub Releases for a newer version, then
+downloads, verifies, installs and relaunches into it. A **Skip** button carries on without
+updating, and **Whiteprint → Check for Updates…** does the same on demand, asking first. When no
+release is newer, or GitHub can't be reached, the app opens as usual.
+
+- **Which releases.** Only tags of the form `vX.Y.Z[-pre]`, never drafts or `windows-v*` tags.
+  Pre-releases are offered only to copies that are themselves pre-releases. The DMG must be
+  `Whiteprint-<version>-AppleSilicon.dmg` or `-Intel.dmg` (whichever matches the Mac), with
+  `<dmg>.sig` next to it.
+- **Signatures.** The app installs a DMG only when `<dmg>.sig` is a valid Ed25519 signature
+  from the key whose public half is `WhiteprintUpdatePublicKey` in `Resources/Info.plist`. The
+  Release workflow signs both DMGs when the `UPDATE_SIGNING_KEY` secret is set. Without it, the
+  release has no `.sig` and installed copies ignore it. The app also checks that the new bundle
+  has the same bundle identifier and version, and passes `codesign --verify`.
+- **When it can't update itself.** A copy that runs from the DMG, from Downloads (App
+  Translocation) or from a folder it can't write to tells the user how to update by hand
+  instead, with a button to the release page. Development builds (not in an `.app`) and edge
+  builds never update.
+- **Turning it off.** `defaults write io.github.l1203012.whiteprint CheckForUpdatesOnLaunch
+  -bool false` skips the check at launch. `WHITEPRINT_NO_UPDATES=1` disables the updater, and
+  `WHITEPRINT_NO_SPLASH=1` hides the launch screen (the screenshot tour hides it too).
+
+### The signing key
+
+The private key is a base64 Ed25519 key. It is created once and kept secret:
+
+```sh
+swift Scripts/update-signing.swift generate ~/.config/whiteprint/update-signing.key
+# prints the public key: put it in Resources/Info.plist as WhiteprintUpdatePublicKey
+gh secret set UPDATE_SIGNING_KEY < ~/.config/whiteprint/update-signing.key
+```
+
+Back the key file up somewhere safe. If it's lost, a new key needs a release with the new
+public key, and users have to install that release by hand. If it leaks, anyone with it can
+sign an update, so rotate it the same way. `Scripts/release.sh` signs a local build when
+`UPDATE_SIGNING_KEY` is set in the environment.
+
+
 
 ```sh
 Scripts/release.sh                 # version from Info.plist

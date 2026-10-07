@@ -140,7 +140,12 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Build DMGs
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
         run: |
+          if [ -z "$UPDATE_SIGNING_KEY" ]; then
+            echo "::warning::UPDATE_SIGNING_KEY is not set, so installed copies won't update to this release by themselves"
+          fi
           ARCHS=arm64 Scripts/release.sh "$VERSION"
           ARCHS=x86_64 Scripts/release.sh "$VERSION"
 
@@ -150,8 +155,10 @@ jobs:
           path: |
             .build/release/${{ env.DMG_ARM }}
             .build/release/${{ env.DMG_ARM }}.sha256
+            .build/release/${{ env.DMG_ARM }}.sig
             .build/release/${{ env.DMG_INTEL }}
             .build/release/${{ env.DMG_INTEL }}.sha256
+            .build/release/${{ env.DMG_INTEL }}.sig
           if-no-files-found: error
           compression-level: 0
 
@@ -190,6 +197,10 @@ jobs:
         run: |
           files=(".build/release/$DMG_ARM" ".build/release/$DMG_ARM.sha256"
                  ".build/release/$DMG_INTEL" ".build/release/$DMG_INTEL.sha256")
+          # The update signatures, when UPDATE_SIGNING_KEY made them.
+          for sig in ".build/release/$DMG_ARM.sig" ".build/release/$DMG_INTEL.sig"; do
+            if [ -f "$sig" ]; then files+=("$sig"); fi
+          done
           prerelease=false
           case "$VERSION" in *-*) prerelease=true ;; esac
           notes="$RUNNER_TEMP/notes.md"
