@@ -35,6 +35,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         outline.outlineTableColumn = column
         outline.headerView = nil
         outline.style = .sourceList
+        outline.backgroundColor = .clear
         outline.floatsGroupRows = false
         outline.rowSizeStyle = .default
         outline.indentationPerLevel = 12
@@ -57,11 +58,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         scroll.drawsBackground = false
         scroll.automaticallyAdjustsContentInsets = false
 
-        let newNote = NSButton(title: "New note", image: NSImage(systemSymbolName: "plus", accessibilityDescription: nil)!, target: nil, action: #selector(AppDelegate.newNote(_:)))
-        newNote.isBordered = false
-        newNote.imagePosition = .imageLeading
-        newNote.contentTintColor = .secondaryLabelColor
-        newNote.font = .systemFont(ofSize: 13)
+        let newNote = NewNoteButton(target: nil, action: #selector(AppDelegate.newNote(_:)))
 
         let root = NSView()
         for view in [search, scroll, newNote] as [NSView] {
@@ -69,15 +66,17 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
             root.addSubview(view)
         }
         NSLayoutConstraint.activate([
-            search.topAnchor.constraint(equalTo: root.safeAreaLayoutGuide.topAnchor, constant: 8),
-            search.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 10),
-            search.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -10),
-            scroll.topAnchor.constraint(equalTo: search.bottomAnchor, constant: 6),
+            // The sidebar sits in a panel below the titlebar, so no safe-area inset.
+            search.topAnchor.constraint(equalTo: root.topAnchor, constant: 12),
+            search.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
+            search.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
+            scroll.topAnchor.constraint(equalTo: search.bottomAnchor, constant: 8),
             scroll.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             scroll.bottomAnchor.constraint(equalTo: newNote.topAnchor, constant: -6),
-            newNote.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 16),
-            newNote.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -12),
+            newNote.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 10),
+            newNote.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -10),
+            newNote.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -10),
         ])
         view = root
     }
@@ -225,7 +224,18 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         guard let note = windowController?.note, number <= note.pages.count else { return nil }
         let page = note.pages[number - 1]
         if let cached = thumbnails[number], cached.page == page { return cached.image }
-        let image = PageThumbnail.image(for: page, size: Self.thumbnailSize, palette: ViewPreferences.shared.pageTheme.palette)
+        let preview = PageThumbnail.image(for: page, size: Self.thumbnailSize, palette: ViewPreferences.shared.pageTheme.palette)
+        // Plain themes match the panel; a hairline keeps the little page visible.
+        let image = NSImage(size: Self.thumbnailSize, flipped: false) { rect in
+            let shape = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), xRadius: 3, yRadius: 3)
+            NSGraphicsContext.saveGraphicsState()
+            shape.addClip()
+            preview.draw(in: rect)
+            NSGraphicsContext.restoreGraphicsState()
+            NSColor.separatorColor.setStroke()
+            shape.stroke()
+            return true
+        }
         thumbnails[number] = (page, image)
         return image
     }
@@ -526,6 +536,10 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
 
     // MARK: NSOutlineViewDelegate
 
+    func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {
+        SidebarRowView()
+    }
+
     func outlineView(_ outlineView: NSOutlineView, isGroupItem item: Any) -> Bool {
         (item as? SidebarNode)?.isSection ?? false
     }
@@ -539,7 +553,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
 
     func outlineView(_ outlineView: NSOutlineView, heightOfRowByItem item: Any) -> CGFloat {
         if case .page = (item as? SidebarNode)?.kind { return Self.thumbnailSize.height + 8 }
-        return 26
+        return 30
     }
 
     func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
@@ -643,8 +657,9 @@ private final class SidebarCell: NSTableCellView {
         detail.alignment = .right
         detail.setContentHuggingPriority(.required, for: .horizontal)
         icon.imageScaling = .scaleProportionallyDown
+        icon.widthAnchor.constraint(greaterThanOrEqualToConstant: 20).isActive = true
         let stack = NSStackView(views: [icon, title, detail])
-        stack.spacing = 7
+        stack.spacing = 8
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
@@ -677,7 +692,8 @@ private final class SidebarCell: NSTableCellView {
             icon.image = image
             icon.contentTintColor = nil
         } else if let symbol {
-            icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+            icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
+                .withSymbolConfiguration(.init(pointSize: 15, weight: .regular))
             icon.contentTintColor = .secondaryLabelColor
         }
         icon.isHidden = icon.image == nil
@@ -693,7 +709,8 @@ private final class SearchButton: NSButton {
         bezelStyle = .roundRect
         isBordered = false
         wantsLayer = true
-        layer?.cornerRadius = 6
+        layer?.cornerRadius = 10
+        layer?.cornerCurve = .continuous
         title = ""
         let glass = NSImageView(image: NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)!)
         glass.contentTintColor = .secondaryLabelColor
@@ -701,27 +718,100 @@ private final class SearchButton: NSButton {
         label.textColor = .secondaryLabelColor
         let shortcut = NSTextField(labelWithString: "⌘K")
         shortcut.textColor = .tertiaryLabelColor
-        shortcut.font = .systemFont(ofSize: 11)
+        shortcut.font = .systemFont(ofSize: 10)
         let spacer = NSView()
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
         let stack = NSStackView(views: [glass, label, spacer, shortcut])
-        stack.spacing = 6
-        stack.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 8)
+        label.font = .systemFont(ofSize: 13)
+        stack.spacing = 7
+        stack.edgeInsets = NSEdgeInsets(top: 0, left: 10, bottom: 0, right: 10)
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor),
             stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            heightAnchor.constraint(equalToConstant: 26),
+            heightAnchor.constraint(equalToConstant: 34),
         ])
         setAccessibilityLabel("Search notes and commands")
         toolTip = "Search notes and commands (⌘K)"
     }
 
     override func updateLayer() {
-        layer?.backgroundColor = NSColor.quaternaryLabelColor.withAlphaComponent(0.12).cgColor
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = NSColor.textBackgroundColor.withAlphaComponent(0.7).cgColor
+        }
     }
 
     override var wantsUpdateLayer: Bool { true }
+}
+
+/// "New Note ⌘N" across the bottom of the sidebar, highlighted on hover.
+private final class NewNoteButton: NSButton {
+    private var isHovered = false {
+        didSet { if oldValue != isHovered { needsDisplay = true } }
+    }
+
+    convenience init(target: AnyObject?, action: Selector) {
+        self.init(frame: .zero)
+        self.target = target
+        self.action = action
+        isBordered = false
+        title = ""
+        let plus = NSImageView(image: NSImage(systemSymbolName: "square.and.pencil", accessibilityDescription: nil)!
+            .withSymbolConfiguration(.init(pointSize: 14, weight: .regular))!)
+        plus.contentTintColor = .secondaryLabelColor
+        let label = NSTextField(labelWithString: "New Note")
+        label.font = .systemFont(ofSize: 13)
+        label.textColor = .secondaryLabelColor
+        let shortcut = NSTextField(labelWithString: "⌘N")
+        shortcut.font = .systemFont(ofSize: 11)
+        shortcut.textColor = .tertiaryLabelColor
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.init(1), for: .horizontal)
+        let stack = NSStackView(views: [plus, label, spacer, shortcut])
+        stack.spacing = 8
+        stack.edgeInsets = NSEdgeInsets(top: 0, left: 10, bottom: 0, right: 10)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
+            heightAnchor.constraint(equalToConstant: 34),
+        ])
+        setAccessibilityLabel("New Note")
+        toolTip = "New note (⌘N)"
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) { isHovered = true }
+    override func mouseExited(with event: NSEvent) { isHovered = false }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard isHovered || isHighlighted else { return }
+        NSColor.labelColor.withAlphaComponent(isHighlighted ? 0.1 : 0.06).setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: 10, yRadius: 10).fill()
+    }
+}
+
+/// A sidebar row whose selection is a soft accent-tinted rounded rectangle,
+/// with the row's text left in its normal colour.
+private final class SidebarRowView: NSTableRowView {
+    override var isEmphasized: Bool {
+        get { false }
+        set {}
+    }
+
+    override func drawSelection(in dirtyRect: NSRect) {
+        let rect = bounds.insetBy(dx: 8, dy: 1)
+        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        NSColor.controlAccentColor.withAlphaComponent(dark ? 0.28 : 0.15).setFill()
+        NSBezierPath(roundedRect: rect, xRadius: 10, yRadius: 10).fill()
+    }
 }

@@ -242,4 +242,21 @@ final class NoteFormatTests: XCTestCase {
         let parsed = try Note(parsing: note.serialized())
         XCTAssertEqual(parsed.pages[0].blocks, [.text("```\ncode\n```"), .drawing(Drawing(id: "d1", source: "box a"))])
     }
+
+    func testWordCountSkipsMarkupDrawingsAndDecks() throws {
+        let note = try Note(parsing: """
+        # Two words
+        - [x] **three** more words
+
+        ```wp id=d1
+        box a
+        ```
+
+        +++page
+
+        Last one.
+        """)
+        XCTAssertEqual(note.wordCount, 7)
+        XCTAssertEqual(Note(title: "Empty").wordCount, 0)
+    }
 }
