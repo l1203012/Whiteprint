@@ -15,7 +15,12 @@ protocol DeckBlockViewDelegate: AnyObject {
 final class DeckBlockView: NSView {
     let blockID: BlockID
     weak var delegate: DeckBlockViewDelegate?
-    private let palette: BlueprintPalette
+    var palette: BlueprintPalette {
+        didSet {
+            for button in [studyButton, editButton] { button.palette = palette }
+            needsDisplay = true
+        }
+    }
     private let studyButton = DeckButton(title: "Study", symbolName: "play.fill")
     private let editButton = DeckButton(title: "Edit", symbolName: nil)
     /// Indices of the cards showing their answers.
@@ -319,9 +324,11 @@ struct DeckLayout {
     }
 }
 
-/// A small pill button for the deck header, drawn for the blueprint page.
+/// A small pill button for the deck header, drawn in the page's colours.
 final class DeckButton: NSButton {
-    var palette = BlueprintPalette.blueprint
+    var palette = BlueprintPalette.blueprint {
+        didSet { needsDisplay = true }
+    }
     private let symbolName: String?
     private var isHovered = false {
         didSet { needsDisplay = true }

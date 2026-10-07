@@ -1,9 +1,9 @@
 import AppKit
 import WhiteprintRender
 
-/// One blueprint sheet: blue background, faint grid, rounded corners and a
-/// soft shadow, with its blocks stacked inside the padding. In A4 layout,
-/// dashed guides mark where printed pages break.
+/// One sheet in the page theme's colours (blueprint pages add a faint grid),
+/// with rounded corners and a soft shadow, its blocks stacked inside the
+/// padding. In A4 layout, dashed guides mark where printed pages break.
 ///
 /// Pages far from the viewport aren't realized: they have no block views,
 /// just an estimated height, until they scroll near.
@@ -11,8 +11,14 @@ final class PageView: NSView {
     static let gridSpacing = SceneRenderer.unit * 2
 
     let pageID: PageID
-    private let palette: BlueprintPalette
+    var palette: BlueprintPalette {
+        didSet { needsDisplay = true }
+    }
     var isRealized = false
+    /// Not the note's first page: without a sheet, a short rule above marks the break.
+    var followsAnotherPage = false {
+        didSet { if oldValue != followsAnotherPage { needsDisplay = true } }
+    }
     /// Content height used while not realized, and the text width it was estimated for.
     var estimatedContentHeight: CGFloat = 0
     var estimatedWidth: CGFloat = 0
@@ -96,11 +102,19 @@ final class PageView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let sheet = sheetRect
+        guard palette.drawsSheet else {
+            if followsAnotherPage {
+                palette.pageEdge.setFill()
+                NSRect(x: (sheet.midX - 24).rounded(), y: bounds.minY, width: 48, height: 1).fill()
+            }
+            drawPageBreaks(in: sheet)
+            return
+        }
         let path = NSBezierPath(roundedRect: sheet, xRadius: PageGeometry.cornerRadius, yRadius: PageGeometry.cornerRadius)
 
         NSGraphicsContext.saveGraphicsState()
         let shadow = NSShadow()
-        shadow.shadowColor = NSColor.black.withAlphaComponent(0.22)
+        shadow.shadowColor = NSColor.black.withAlphaComponent(palette.shadowOpacity)
         shadow.shadowBlurRadius = 12
         shadow.shadowOffset = NSSize(width: 0, height: -3)
         shadow.set()
@@ -108,8 +122,20 @@ final class PageView: NSView {
         path.fill()
         NSGraphicsContext.restoreGraphicsState()
 
+        if palette.showsGrid {
+            drawGrid(in: dirtyRect, sheet: sheet, clip: path)
+        }
+
+        palette.pageEdge.setStroke()
+        let edge = NSBezierPath(roundedRect: sheet.insetBy(dx: 0.5, dy: 0.5),
+                                xRadius: PageGeometry.cornerRadius, yRadius: PageGeometry.cornerRadius)
+        edge.stroke()
+        drawPageBreaks(in: sheet)
+    }
+
+    private func drawGrid(in dirtyRect: NSRect, sheet: NSRect, clip: NSBezierPath) {
         NSGraphicsContext.saveGraphicsState()
-        path.addClip()
+        clip.addClip()
         let area = dirtyRect.intersection(sheet)
         let grid = NSBezierPath()
         let spacing = Self.gridSpacing
@@ -129,12 +155,6 @@ final class PageView: NSView {
         palette.grid.setStroke()
         grid.stroke()
         NSGraphicsContext.restoreGraphicsState()
-
-        NSColor(white: 1, alpha: 0.08).setStroke()
-        let edge = NSBezierPath(roundedRect: sheet.insetBy(dx: 0.5, dy: 0.5),
-                                xRadius: PageGeometry.cornerRadius, yRadius: PageGeometry.cornerRadius)
-        edge.stroke()
-        drawPageBreaks(in: sheet)
     }
 
     /// A dashed line across the sheet at each printed page break, with the

@@ -319,3 +319,15 @@ final class MarkdownStylerTests: XCTestCase {
         XCTAssertEqual(bulletIndent, ceil(bulletWidth), accuracy: 0.5)
     }
 }
+
+final class PageThemeTests: XCTestCase {
+    func testEveryThemeHasItsOwnPalette() {
+        XCTAssertEqual(PageTheme.default, .paper)
+        XCTAssertEqual(PageTheme.blueprint.palette.pageBackground, BlueprintPalette.blueprint.pageBackground)
+        XCTAssertTrue(PageTheme.blueprint.palette.showsGrid)
+        for theme in PageTheme.allCases where theme != .blueprint {
+            XCTAssertFalse(theme.palette.showsGrid, "\(theme) pages are plain")
+        }
+        XCTAssertEqual(Set(PageTheme.allCases.map(\.title)).count, PageTheme.allCases.count)
+    }
+}

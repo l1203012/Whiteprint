@@ -1,13 +1,16 @@
 import AppKit
 import WhiteprintBridge
+import WhiteprintRender
 import WhiteprintStudy
 
-/// Settings: the AI provider and connecting Claude, the notes folder, and the study cache.
+/// Settings: the AI provider and connecting Claude, the page theme, the notes
+/// folder, and the study cache.
 final class SettingsWindowController: NSWindowController {
     init() {
         let tabs = NSTabViewController()
         tabs.tabStyle = .toolbar
         tabs.addTabViewItem(Self.tab(AISettingsViewController(), "AI", "sparkles"))
+        tabs.addTabViewItem(Self.tab(AppearanceSettingsViewController(), "Appearance", "paintpalette"))
         tabs.addTabViewItem(Self.tab(NotesSettingsViewController(), "Notes", "folder"))
         tabs.addTabViewItem(Self.tab(StudySettingsViewController(), "Study", "graduationcap"))
         let window = NSWindow(contentViewController: tabs)
@@ -314,6 +317,38 @@ private final class AISettingsViewController: SettingsPane {
             inform("Couldn't update the Claude Desktop config.", errorLine(error), style: .warning)
         }
         updateDesktopStatus()
+    }
+}
+
+// MARK: - Appearance
+
+private final class AppearanceSettingsViewController: SettingsPane {
+    private let themePopup = NSPopUpButton()
+    private var observer: NSObjectProtocol?
+
+    deinit {
+        observer.map(NotificationCenter.default.removeObserver)
+    }
+
+    override func build() {
+        header("Page theme")
+        note("How pages look while you write. PDF export has its own Blueprint and Print styles.")
+        themePopup.addItems(withTitles: PageTheme.allCases.map(\.title))
+        themePopup.target = self
+        themePopup.action = #selector(themeChanged(_:))
+        row(themePopup)
+        update()
+        observer = NotificationCenter.default.addObserver(forName: .viewPreferencesDidChange, object: nil, queue: .main) { [weak self] _ in
+            self?.update()
+        }
+    }
+
+    private func update() {
+        themePopup.selectItem(at: PageTheme.allCases.firstIndex(of: ViewPreferences.shared.pageTheme) ?? 0)
+    }
+
+    @objc private func themeChanged(_ sender: NSPopUpButton) {
+        ViewPreferences.shared.pageTheme = PageTheme.allCases[max(0, sender.indexOfSelectedItem)]
     }
 }
 

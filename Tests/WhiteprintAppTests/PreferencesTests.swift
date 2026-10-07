@@ -1,6 +1,7 @@
 import AppKit
 import XCTest
 @testable import WhiteprintApp
+import WhiteprintRender
 import WhiteprintStudy
 
 final class ViewPreferencesTests: XCTestCase {
@@ -29,6 +30,20 @@ final class ViewPreferencesTests: XCTestCase {
         XCTAssertEqual(posts, 2)
         XCTAssertEqual(ViewPreferences(defaults: defaults).layoutMode, .a4)
         XCTAssertTrue(ViewPreferences(defaults: defaults).showsMarkdownSyntax)
+    }
+
+    func testPageThemeDefaultsToPaper() {
+        let preferences = ViewPreferences(defaults: defaults)
+        XCTAssertEqual(preferences.pageTheme, .paper)
+        var posts = 0
+        let observer = NotificationCenter.default.addObserver(forName: .viewPreferencesDidChange, object: preferences, queue: nil) { _ in posts += 1 }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        preferences.pageTheme = .blueprint
+        preferences.pageTheme = .blueprint
+        XCTAssertEqual(posts, 1)
+        XCTAssertEqual(ViewPreferences(defaults: defaults).pageTheme, .blueprint)
+        defaults.set("plaid", forKey: ViewPreferences.themeKey)
+        XCTAssertEqual(ViewPreferences(defaults: defaults).pageTheme, .paper, "an unknown theme falls back to the default")
     }
 
     func testTouchBarItems() throws {

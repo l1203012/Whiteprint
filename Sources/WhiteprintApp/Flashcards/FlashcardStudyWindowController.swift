@@ -18,7 +18,7 @@ final class FlashcardStudyWindowController: NSWindowController, NSWindowDelegate
     private let titleLabel = NSTextField(labelWithString: "")
     private let summaryLabel = NSTextField(labelWithString: "")
     private let shuffleBox = NSButton(checkboxWithTitle: "Shuffle", target: nil, action: nil)
-    private let card = FlashcardView(palette: .blueprint)
+    private let card = FlashcardView(palette: ViewPreferences.shared.pageTheme.palette)
     private let hint = NSTextField(labelWithString: "")
     private let flipButton = NSButton(title: "Show Answer", target: nil, action: nil)
     private let ratingRow = NSStackView()

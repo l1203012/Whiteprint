@@ -16,7 +16,12 @@ final class DrawingBlockView: NSView {
     let blockID: BlockID
     let drawingView: DrawingView
     weak var delegate: DrawingBlockViewDelegate?
-    private let palette: BlueprintPalette
+    var palette: BlueprintPalette {
+        didSet {
+            drawingView.palette = palette
+            needsDisplay = true
+        }
+    }
     private var canvasSize: CGSize = .zero
     private var isHovered = false {
         didSet { if oldValue != isHovered { needsDisplay = true } }

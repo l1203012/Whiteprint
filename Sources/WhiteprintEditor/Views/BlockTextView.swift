@@ -10,8 +10,8 @@ protocol BlockTextViewDelegate: AnyObject {
     func blockTextViewTouchBar(_ view: BlockTextView) -> NSTouchBar?
 }
 
-/// One run of Markdown text: a transparent, auto-height `NSTextView` with
-/// white text, restyled by `MarkdownStyler` as it's edited.
+/// One run of Markdown text: a transparent, auto-height `NSTextView` in the
+/// page's colours, restyled by `MarkdownStyler` as it's edited.
 ///
 /// With `concealsMarkup`, the markup of every paragraph but the ones holding
 /// the caret or selection is hidden (see `MarkdownLayoutManager`).
@@ -19,7 +19,13 @@ final class BlockTextView: NSTextView, NSTextStorageDelegate {
     static let placeholderText = "Type / for commands"
 
     let blockID: BlockID
-    let palette: BlueprintPalette
+    var palette: BlueprintPalette {
+        didSet {
+            applyPaletteColors()
+            restyle()
+            needsDisplay = true
+        }
+    }
     weak var blockDelegate: BlockTextViewDelegate?
     /// Shows the placeholder while empty even when not focused (an empty page).
     var isAlonePlaceholder = false {
@@ -52,7 +58,6 @@ final class BlockTextView: NSTextView, NSTextStorageDelegate {
         self.concealsMarkup = concealsMarkup
         let storage = NSTextStorage()
         let layout = MarkdownLayoutManager()
-        layout.palette = palette
         storage.addLayoutManager(layout)
         let container = NSTextContainer(size: NSSize(width: width, height: .greatestFiniteMagnitude))
         container.widthTracksTextView = true
@@ -77,9 +82,7 @@ final class BlockTextView: NSTextView, NSTextStorageDelegate {
         isHorizontallyResizable = false
         minSize = NSSize(width: 0, height: TextStyle.lineHeight(fontSize))
         maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
-        insertionPointColor = palette.text
-        selectedTextAttributes = [.backgroundColor: palette.accent.withAlphaComponent(0.32)]
-        typingAttributes = TextStyle.base(palette, fontSize: fontSize)
+        applyPaletteColors()
         setAccessibilityLabel("Text block")
         setText(text)
     }
@@ -99,6 +102,13 @@ final class BlockTextView: NSTextView, NSTextStorageDelegate {
     }
 
     // MARK: Styling
+
+    private func applyPaletteColors() {
+        (layoutManager as? MarkdownLayoutManager)?.palette = palette
+        insertionPointColor = palette.text
+        selectedTextAttributes = [.backgroundColor: palette.accent.withAlphaComponent(0.32)]
+        typingAttributes = TextStyle.base(palette, fontSize: fontSize)
+    }
 
     func textStorage(
         _ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions,

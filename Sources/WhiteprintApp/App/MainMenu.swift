@@ -1,5 +1,6 @@
 import AppKit
 import WhiteprintEditor
+import WhiteprintRender
 
 /// The menu bar, built in code. Actions go up the responder chain: note
 /// actions to the window controller or document, app actions to the delegate.
@@ -107,6 +108,13 @@ enum MainMenu {
             layout.addItem(option)
         }
         menu.addItem(submenu(layout))
+        let theme = NSMenu(title: "Page Theme")
+        for pageTheme in PageTheme.allCases {
+            let option = item(pageTheme.title, #selector(AppDelegate.setPageTheme(_:)))
+            option.representedObject = pageTheme.rawValue
+            theme.addItem(option)
+        }
+        menu.addItem(submenu(theme))
         menu.addItem(item("Show Markdown Syntax", #selector(AppDelegate.toggleMarkdownSyntax(_:)), "m", [.command, .shift]))
         menu.addItem(.separator())
         menu.addItem(item("Enter Full Screen", #selector(NSWindow.toggleFullScreen(_:)), "f", [.command, .control]))

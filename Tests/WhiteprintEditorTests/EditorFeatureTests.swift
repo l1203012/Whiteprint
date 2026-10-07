@@ -118,6 +118,17 @@ final class EditorFeatureTests: XCTestCase {
         XCTAssertEqual(view.string, "# Title\n**bold** and `code`\n- [ ] task", "the text stays raw Markdown")
     }
 
+    func testChangingThePaletteRestylesInPlace() throws {
+        try open("Intro text")
+        let view = try XCTUnwrap(editor.textViews[block(0, 0).id])
+        XCTAssertFalse(editor.palette.showsGrid, "pages default to the Paper theme")
+        editor.palette = .blueprint
+        let font = try XCTUnwrap(view.textStorage?.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)
+        XCTAssertEqual(font, NSFont.systemFont(ofSize: font.pointSize))
+        XCTAssertEqual(view.textStorage?.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor, .white)
+        XCTAssertEqual(editor.scrollView.backgroundColor, BlueprintPalette.blueprint.canvas)
+    }
+
     func testConcealedGlyphsTakeNoSpace() throws {
         try open("Intro\n# Title\n- item")
         editor.showsMarkdownSyntax = false

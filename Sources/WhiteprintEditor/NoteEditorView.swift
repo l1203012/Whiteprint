@@ -3,7 +3,7 @@ import WhiteprintCore
 import WhiteprintRender
 
 /// The Notion-style editing surface for one note: a scrolling, centred column
-/// of blue blueprint pages with white text, inline drawings and flashcard
+/// of pages in the chosen `PageTheme`, with inline drawings and flashcard
 /// decks, slash menu, Markdown shortcuts, checkboxes and a Touch Bar.
 ///
 /// The content lives in an `EditorDocument`; views are thin and keyed by
@@ -44,7 +44,19 @@ public final class NoteEditorView: NSView {
         }
     }
 
-    let palette: BlueprintPalette
+    /// The page colours; changing it restyles every page in place.
+    public var palette: BlueprintPalette {
+        didSet {
+            scrollView.backgroundColor = palette.canvas
+            handle.palette = palette
+            for view in pageViews { view.palette = palette }
+            for view in textViews.values { view.palette = palette }
+            for view in drawingViews.values { view.palette = palette }
+            for view in deckViews.values { view.palette = palette }
+            for page in pageViews { page.estimatedWidth = 0 }
+            needsLayout = true
+        }
+    }
     var document: EditorDocument
     let scrollView = NSScrollView()
     let documentView = EditorDocumentView()
@@ -73,7 +85,7 @@ public final class NoteEditorView: NSView {
     private var isSyncing = false
     private var isLayingOut = false
 
-    public init(note: Note, palette: BlueprintPalette = .blueprint) {
+    public init(note: Note, palette: BlueprintPalette = PageTheme.default.palette) {
         self.palette = palette
         document = EditorDocument(note: note)
         self.note = document.note
@@ -186,7 +198,7 @@ public final class NoteEditorView: NSView {
         scrollView.autohidesScrollers = true
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = true
-        scrollView.backgroundColor = .windowBackgroundColor
+        scrollView.backgroundColor = palette.canvas
         scrollView.documentView = documentView
         scrollView.contentView.postsBoundsChangedNotifications = true
         NotificationCenter.default.addObserver(self, selector: #selector(didScroll),
@@ -239,6 +251,7 @@ public final class NoteEditorView: NSView {
             let frame = NSRect(x: geometry.pageX - inset, y: sheetTop - inset,
                                width: geometry.pageWidth + 2 * inset, height: height + 2 * inset)
             if page.frame != frame { page.frame = frame }
+            page.followsAnotherPage = index > 0
             sheetTop += height + PageGeometry.pageGap
         }
         let height = max(sheetTop + PageGeometry.pageGap, scrollView.contentSize.height)

@@ -54,8 +54,11 @@ final class NoteTouchBar: NSObject, NSTouchBarDelegate {
         case Item.sidebar:
             return button(identifier, "Toggle Sidebar", "sidebar.left", #selector(NSSplitViewController.toggleSidebar(_:)))
         case Item.study:
-            let item = button(identifier, "Study", "rectangle.on.rectangle.angled", #selector(NoteWindowController.studyFlashcards(_:)))
-            item.title = "Study"
+            // Made with its title, so the symbol sits beside "Study" instead of on top of it.
+            let image = NSImage(systemSymbolName: "rectangle.on.rectangle.angled", accessibilityDescription: "Study") ?? NSImage()
+            let item = NSButtonTouchBarItem(identifier: identifier, title: "Study", image: image, target: nil,
+                                            action: #selector(NoteWindowController.studyFlashcards(_:)))
+            item.customizationLabel = "Study"
             return item
         case Item.layout:
             let control = NSSegmentedControl(labels: PageLayoutMode.allCases.map(Self.title), trackingMode: .selectOne,

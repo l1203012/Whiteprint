@@ -93,7 +93,7 @@ final class MarkdownLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
                          width: side - 1, height: side - 1)
         let path = NSBezierPath(roundedRect: box, xRadius: 3, yRadius: 3)
         if checked {
-            palette.accent.setFill()
+            palette.checkbox.setFill()
             path.fill()
             let tick = NSBezierPath()
             tick.move(to: NSPoint(x: box.minX + side * 0.24, y: box.midY + side * 0.02))
