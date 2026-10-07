@@ -101,6 +101,8 @@ bundle() {
     if [ -d "$ROOT/Resources/App" ]; then
         cp -R "$ROOT/Resources/App/." "$app/Contents/Resources/"
     fi
+    # The note cover gallery, loaded by CoverGallery from Bundle.main.
+    cp -R "$ROOT/Resources/Covers" "$app/Contents/Resources/Covers"
     universal WhiteprintApp "$app/Contents/MacOS/Whiteprint"
     universal whiteprint-mcp "$app/Contents/MacOS/whiteprint-mcp"
     local build_number
