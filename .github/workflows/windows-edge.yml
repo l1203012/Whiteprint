@@ -22,7 +22,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Version
         shell: bash
@@ -70,7 +70,7 @@ jobs:
           powershell -ExecutionPolicy Bypass -File windows/installer/package.ps1 -Version $env:VERSION -BuildDir build
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: Whiteprint-${{ env.VERSION }}
           path: |
