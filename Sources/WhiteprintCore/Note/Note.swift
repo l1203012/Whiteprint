@@ -1,3 +1,5 @@
+import Foundation
+
 /// A Whiteprint note: the in-memory form of a `.wprint` file.
 ///
 /// A note is a list of pages. Each page is a list of blocks: Markdown text,
@@ -237,6 +239,26 @@ public struct FrontMatter: Equatable {
     public var title: String? {
         get { self["title"] }
         set { self["title"] = newValue }
+    }
+
+    /// The page icon shown above the title, Notion-style: one emoji, stored
+    /// as `icon: 🧭`. Setting an empty value removes the field.
+    public var icon: String? {
+        get { self["icon"].flatMap(Self.nonEmpty) }
+        set { self["icon"] = newValue.flatMap(Self.nonEmpty) }
+    }
+
+    /// The banner across the top of the first page: a cover gallery id such
+    /// as `monet-water-lilies`, stored as `cover: …`. Setting an empty value
+    /// removes the field.
+    public var cover: String? {
+        get { self["cover"].flatMap(Self.nonEmpty) }
+        set { self["cover"] = newValue.flatMap(Self.nonEmpty) }
+    }
+
+    private static func nonEmpty(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     public var formatVersion: Int? {

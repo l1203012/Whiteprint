@@ -148,6 +148,35 @@ final class NoteFormatTests: XCTestCase {
         XCTAssertNil(frontMatter.title)
     }
 
+    func testIconAndCoverAreFrontMatterFields() throws {
+        let note = try Note(parsing: "---\nwhiteprint: 1\ntitle: Trip\nicon: 🧭\ncover: monet-water-lilies\n---\n\nHi\n")
+        XCTAssertEqual(note.frontMatter.icon, "🧭")
+        XCTAssertEqual(note.frontMatter.cover, "monet-water-lilies")
+        XCTAssertEqual(try Note(parsing: note.serialized()), note)
+    }
+
+    func testSettingIconAndCoverWritesAndRemovesFields() {
+        var frontMatter = FrontMatter()
+        frontMatter.title = "Trip"
+        frontMatter.icon = "🌊"
+        frontMatter.cover = "turner-fighting-temeraire"
+        XCTAssertEqual(frontMatter.fields.map(\.key), ["whiteprint", "title", "icon", "cover"])
+        XCTAssertEqual(frontMatter["icon"], "🌊")
+        frontMatter.icon = "👩‍🚀"
+        XCTAssertEqual(frontMatter.icon, "👩‍🚀")
+        frontMatter.icon = nil
+        frontMatter.cover = "  "
+        XCTAssertNil(frontMatter.icon)
+        XCTAssertNil(frontMatter.cover)
+        XCTAssertEqual(frontMatter.fields.map(\.key), ["whiteprint", "title"])
+    }
+
+    func testBlankIconOrCoverReadsAsNone() throws {
+        let note = try Note(parsing: "---\nwhiteprint: 1\nicon:\ncover:   \n---\n")
+        XCTAssertNil(note.frontMatter.icon)
+        XCTAssertNil(note.frontMatter.cover)
+    }
+
     // MARK: Serializing
 
     func testSerializesCanonicalForm() {
