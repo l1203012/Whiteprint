@@ -44,6 +44,11 @@ final class ViewPreferencesTests: XCTestCase {
             XCTAssertFalse(item.customizationLabel.isEmpty)
             XCTAssertTrue(bar.customizationAllowedItemIdentifiers.contains(id))
         }
+        // While typing, the editor's formatting buttons win over these.
+        XCTAssertEqual(bar.item(forIdentifier: NoteTouchBar.Item.sidebar)?.visibilityPriority, .normal)
+        for id in [NoteTouchBar.Item.newNote, NoteTouchBar.Item.layout, NoteTouchBar.Item.syntax, NoteTouchBar.Item.study] {
+            XCTAssertEqual(bar.item(forIdentifier: id)?.visibilityPriority, .low, id.rawValue)
+        }
         let layout = try XCTUnwrap((bar.item(forIdentifier: NoteTouchBar.Item.layout) as? NSCustomTouchBarItem)?.view as? NSSegmentedControl)
         XCTAssertEqual(layout.segmentCount, 2)
         XCTAssertEqual(layout.selectedSegment, 1)
