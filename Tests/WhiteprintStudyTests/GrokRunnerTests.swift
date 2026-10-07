@@ -137,6 +137,17 @@ final class GrokRunnerTests: XCTestCase {
         return events
     }
 
+    /// Waits until the stub has seen `count` requests.
+    private func waitForRequests(_ count: Int, timeout: TimeInterval = 10) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while GrokStub.requests.count < count {
+            guard Date() < deadline else {
+                return XCTFail("the stub saw \(GrokStub.requests.count) of \(count) requests")
+            }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
+
     private static func toolCalls(_ calls: [(id: String, name: String, arguments: String)], content: Any = NSNull()) -> GrokStub.Reply {
         let toolCalls = calls.map { call -> [String: Any] in
             ["id": call.id, "type": "function", "function": ["name": call.name, "arguments": call.arguments]]
@@ -248,12 +259,18 @@ final class GrokRunnerTests: XCTestCase {
         XCTAssertEqual(GrokStub.requests.count, 4)
     }
 
-    func testRefusesASecondRun() throws {
+    func testRefusesASecondRun() async throws {
         GrokStub.reset([.hang])
         let runner = runner()
         try start(runner)
         XCTAssertThrowsError(try start(runner)) { XCTAssertEqual($0 as? StudyError, .alreadyRunning) }
+        // Wind the run down before returning: a request still on its way to
+        // the stub would otherwise take the next test's scripted reply.
+        try await waitForRequests(1)
         runner.cancel()
+        let ended = try await waitForEnd()
+        XCTAssertEqual(ended, [.status("Starting Grok…"), .failed("Cancelled")])
+        XCTAssertEqual(GrokStub.requests.count, 1)
     }
 
     // MARK: errors
@@ -322,7 +339,7 @@ final class GrokRunnerTests: XCTestCase {
         GrokStub.reset([.hang])
         let runner = runner()
         try start(runner)
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await waitForRequests(1)
         runner.cancel()
         let ended = try await waitForEnd()
         XCTAssertEqual(ended, [.status("Starting Grok…"), .failed("Cancelled")])
