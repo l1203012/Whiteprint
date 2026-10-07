@@ -12,6 +12,7 @@
 #include "app/NoteWindow.h"
 #include "app/SidebarModel.h"
 #include "app/SidebarWidget.h"
+#include "app/ViewPreferences.h"
 #include "editor/NoteEditorView.h"
 #include "render/Fonts.h"
 
@@ -330,6 +331,19 @@ private slots:
         QCOMPARE(shortcutOf("Heading 1"), QStringLiteral("Ctrl+Alt+1"));
         QCOMPARE(shortcutOf("Add Page"), QStringLiteral("Ctrl+Alt+N"));
         QCOMPARE(shortcutOf("Show Markdown Syntax"), QStringLiteral("Ctrl+Shift+M"));
+
+        // View > Page Theme restyles the open editor; Paper is the default.
+        QVERIFY(window.editor()->blueprintPalette() == BlueprintPalette::paper(false));
+        QAction *blueprintTheme = nullptr;
+        for (QAction *a : window.findChildren<QAction *>())
+            if (a->text() == QStringLiteral("Blueprint") && a->isCheckable())
+                blueprintTheme = a;
+        QVERIFY(blueprintTheme);
+        blueprintTheme->trigger();
+        QCOMPARE(ViewPreferences::shared().pageTheme(), PageTheme::blueprint);
+        QVERIFY(window.editor()->blueprintPalette() == BlueprintPalette::blueprint());
+        ViewPreferences::shared().setPageTheme(PageTheme::paper);
+        QVERIFY(window.editor()->blueprintPalette() == BlueprintPalette::paper(false));
 
         QVERIFY(window.isSidebarVisible());
         window.toggleSidebar();

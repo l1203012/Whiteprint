@@ -71,6 +71,8 @@ public:
     void noteDidChange();
     /// The visible page changed.
     void visiblePageDidChange();
+    /// Redraws the page thumbnails in the new theme's colours.
+    void pageThemeDidChange();
 
     /// The folder new notes and folders go into (nullopt: the top level).
     std::optional<QString> selectedFolder() const;

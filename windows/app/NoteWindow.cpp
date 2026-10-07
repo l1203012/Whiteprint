@@ -177,7 +177,7 @@ NoteWindow::NoteWindow(NoteDocument *document, QWidget *parent) : QMainWindow(pa
     setObjectName(QStringLiteral("NoteWindow"));
     setWindowIcon(QApplication::windowIcon());
 
-    m_editor = new NoteEditorView(document->note());
+    m_editor = new NoteEditorView(document->note(), ViewPreferences::shared().pagePalette());
     m_sidebar = new SidebarWidget({
         [this] { return m_document.data(); },
         [this] { return note(); },
@@ -427,6 +427,12 @@ void NoteWindow::applyViewPreferences()
     const PageLayoutMode mode = prefs.layoutMode() == ViewLayout::a4 ? PageLayoutMode::a4 : PageLayoutMode::slides;
     if (m_editor->layoutMode() != mode)
         m_editor->setLayoutMode(mode);
+    // Compared as colours, so a Windows light/dark switch also re-applies Paper.
+    const BlueprintPalette palette = prefs.pagePalette();
+    if (m_editor->blueprintPalette() != palette) {
+        m_editor->setBlueprintPalette(palette);
+        m_sidebar->pageThemeDidChange();
+    }
     if (m_editor->showsMarkdownSyntax() != prefs.showsMarkdownSyntax())
         m_editor->setShowsMarkdownSyntax(prefs.showsMarkdownSyntax());
     syncModeButtons();
@@ -742,6 +748,9 @@ void NoteWindow::changeEvent(QEvent *event)
     // A live Windows light/dark switch: the toolbar's stylesheet and icons hold the old colours.
     if (event->type() == QEvent::PaletteChange && m_toolbar)
         applyToolbarColors();
+    // Paper follows light/dark too.
+    if (event->type() == QEvent::PaletteChange && m_editor && m_sidebar && m_slidesButton)
+        applyViewPreferences();
     if (event->type() == QEvent::ActivationChange) {
         m_sidebar->tree()->viewport()->update();
         if (isActiveWindow()) {

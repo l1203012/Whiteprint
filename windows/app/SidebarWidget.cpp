@@ -11,6 +11,7 @@
 #include "app/NoteFileActions.h"
 #include "app/NoteTitle.h"
 #include "app/UiKit.h"
+#include "app/ViewPreferences.h"
 #include "render/Fonts.h"
 #include "render/PageThumbnail.h"
 
@@ -565,6 +566,12 @@ void SidebarWidget::visiblePageDidChange()
     m_tree->viewport()->update();
 }
 
+void SidebarWidget::pageThemeDidChange()
+{
+    m_thumbnails.clear();
+    m_tree->viewport()->update();
+}
+
 void SidebarWidget::reloadNotes()
 {
     if (m_renaming)
@@ -648,7 +655,7 @@ QImage SidebarWidget::thumbnail(int number)
     const auto it = m_thumbnails.constFind(number);
     if (it != m_thumbnails.constEnd() && it->first == page)
         return it->second;
-    const QImage image = PageThumbnail::image(page, thumbnailSize(), BlueprintPalette::blueprint(), devicePixelRatioF());
+    const QImage image = PageThumbnail::image(page, thumbnailSize(), ViewPreferences::shared().pagePalette(), devicePixelRatioF());
     m_thumbnails.insert(number, {page, image});
     return image;
 }

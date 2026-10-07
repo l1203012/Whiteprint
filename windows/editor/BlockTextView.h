@@ -45,8 +45,8 @@ double lineHeight(double fontSize);
 
 } // namespace TextStyle
 
-/// One run of Markdown text: a transparent, auto-height text edit with
-/// white text, restyled by `MarkdownStyler` as it's edited. Its own undo is
+/// One run of Markdown text: a transparent, auto-height text edit in the
+/// page's colours, restyled by `MarkdownStyler` as it's edited. Its own undo is
 /// off; the editor keeps one undo stack for everything.
 ///
 /// With `concealsMarkup`, the markup of every paragraph but the ones holding
@@ -63,6 +63,8 @@ public:
 
     BlockID blockID() const { return m_blockID; }
     const BlueprintPalette &blueprintPalette() const { return m_palette; }
+    /// Changes the colours and restyles the text in place.
+    void setBlueprintPalette(const BlueprintPalette &palette);
     void setDelegate(BlockTextViewDelegate *delegate) { m_delegate = delegate; }
 
     /// Shows the placeholder while empty even when not focused (an empty page).
@@ -125,6 +127,7 @@ protected:
 private:
     void onContentsChange(int from, int removed, int added);
     void onSelectionChanged();
+    void applyPaletteColors();
     void style(std::optional<TextRange> range);
     void restyle();
     std::optional<TextRange> revealedParagraphs() const;

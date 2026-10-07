@@ -22,6 +22,13 @@ DrawingBlockView::DrawingBlockView(BlockID blockID, const QString &source, const
     setAccessibleName(QStringLiteral("Drawing"));
 }
 
+void DrawingBlockView::setBlueprintPalette(const BlueprintPalette &palette)
+{
+    m_palette = palette;
+    m_drawingView->setPalette(palette);
+    update();
+}
+
 void DrawingBlockView::setSource(const QString &source)
 {
     if (source == m_drawingView->source())

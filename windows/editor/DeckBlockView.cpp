@@ -102,6 +102,12 @@ double DeckButton::preferredWidth(double height) const
     return std::ceil(titleWidth + symbolWidth + height * 0.9);
 }
 
+void DeckButton::setBlueprintPalette(const BlueprintPalette &palette)
+{
+    m_palette = palette;
+    update();
+}
+
 void DeckButton::paintEvent(QPaintEvent *)
 {
     QPainter p(this);
@@ -164,6 +170,14 @@ DeckBlockView::DeckBlockView(BlockID blockID, const CardDeck &deck, const Bluepr
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
     changed();
+}
+
+void DeckBlockView::setBlueprintPalette(const BlueprintPalette &palette)
+{
+    m_palette = palette;
+    m_study->setBlueprintPalette(palette);
+    m_edit->setBlueprintPalette(palette);
+    update();
 }
 
 void DeckBlockView::setDeck(const CardDeck &deck)

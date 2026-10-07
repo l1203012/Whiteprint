@@ -1,5 +1,5 @@
 #pragma once
-// Port of SettingsWindowController.swift: tabs AI, Notes, Study.
+// Port of SettingsWindowController.swift: tabs AI, Appearance, Notes, Study.
 #include <QWidget>
 
 class QTabBar;
@@ -17,7 +17,7 @@ public:
 
     int currentTab() const;
     void setCurrentTab(int index);
-    /// The tab pages, for tests: 0 AI, 1 Notes, 2 Study.
+    /// The tab pages, for tests: 0 AI, 1 Appearance, 2 Notes, 3 Study.
     QWidget *page(int index) const;
 
 private:

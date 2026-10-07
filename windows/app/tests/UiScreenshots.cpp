@@ -73,7 +73,7 @@ private slots:
             ai.claudeFound(QString("C:/Users/me/.local/bin/claude.exe"));
             shoot(ai, out, "settings-ai", dark);
 
-            for (int tab = 0; tab < 3; ++tab) {
+            for (int tab = 0; tab < 4; ++tab) {
                 SettingsWindow settingsWindow;
                 settingsWindow.setCurrentTab(tab);
                 shoot(settingsWindow, out, QStringLiteral("settings-window%1").arg(tab), dark);

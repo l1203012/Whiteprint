@@ -144,7 +144,7 @@ void draw(QPainter &painter, const QTextDocument *document, const BlueprintPalet
                 const QRectF box(std::round(rect.left() + 1) + 0.5, std::round(baseline - capHeight / 2 - side / 2) + 0.5, side - 1, side - 1);
                 if (checked) {
                     painter.setPen(Qt::NoPen);
-                    painter.setBrush(palette.accent);
+                    painter.setBrush(palette.checkbox);
                     painter.drawRoundedRect(box, 3, 3);
                     QPainterPath tick;
                     tick.moveTo(box.left() + side * 0.24, box.center().y() + side * 0.02);

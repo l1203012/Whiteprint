@@ -183,7 +183,8 @@ void draw(const NotePage &page, QPainter &painter, QSizeF size, const BlueprintP
     double spacing = SceneRenderer::unit * scale;
     while (spacing < 4)
         spacing *= 2;
-    strokeGrid(painter, size, spacing, palette.grid);
+    if (palette.showsGrid)
+        strokeGrid(painter, size, spacing, palette.grid);
 
     painter.scale(scale, scale);
     ThumbnailLayout layout(painter, palette, scale, size.height() / scale - padding / 2);

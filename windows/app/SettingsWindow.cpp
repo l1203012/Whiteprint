@@ -5,6 +5,7 @@
 #include "app/MacStyle.h"
 #include "app/SettingsPages.h"
 #include "app/UiKit.h"
+#include "app/ViewPreferences.h"
 #include "render/Fonts.h"
 
 #include <QButtonGroup>
@@ -83,16 +84,18 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QWidget(parent, Qt::Window | Q
     auto &services = AppServices::shared();
     auto *ai = new AISettingsPage(AISettings::shared());
     connect(ai, &AISettingsPage::studyStateChanged, this, [&services] { emit services.study().changed(); });
+    auto *appearance = new AppearanceSettingsPage(ViewPreferences::shared());
     auto *notes = new NotesSettingsPage(services.library());
     auto *study = new StudySettingsPage(services.study());
 
     m_pages = new QStackedWidget;
     const QList<std::pair<QString, ui::Symbol>> tabs = {
         {QStringLiteral("AI"), ui::Symbol::sparkles},
+        {QStringLiteral("Appearance"), ui::Symbol::palette},
         {QStringLiteral("Notes"), ui::Symbol::folder},
         {QStringLiteral("Study"), ui::Symbol::graduation},
     };
-    const QList<QWidget *> pages = {ai, notes, study};
+    const QList<QWidget *> pages = {ai, appearance, notes, study};
     auto *toolbar = new QHBoxLayout;
     toolbar->setContentsMargins(8, 6, 8, 6);
     toolbar->setSpacing(2);
@@ -137,7 +140,8 @@ int SettingsWindow::currentTab() const
 
 void SettingsWindow::setCurrentTab(int index)
 {
-    static const QStringList titles = {QStringLiteral("AI"), QStringLiteral("Notes"), QStringLiteral("Study")};
+    static const QStringList titles = {QStringLiteral("AI"), QStringLiteral("Appearance"), QStringLiteral("Notes"),
+                                       QStringLiteral("Study")};
     if (index < 0 || index >= m_pages->count())
         return;
     for (int i = 0; i < m_pages->count(); ++i)

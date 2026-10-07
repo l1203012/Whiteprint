@@ -37,6 +37,9 @@ public:
     DrawingView *drawingView() const { return m_drawingView.get(); }
     void setDelegate(DrawingBlockViewDelegate *delegate) { m_delegate = delegate; }
 
+    /// Changes the colours of the block and its drawing.
+    void setBlueprintPalette(const BlueprintPalette &palette);
+
     const QString &source() const { return m_drawingView->source(); }
     void setSource(const QString &source);
 
