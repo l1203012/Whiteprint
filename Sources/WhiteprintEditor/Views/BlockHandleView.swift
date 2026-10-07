@@ -5,7 +5,9 @@ import WhiteprintRender
 final class BlockHandleView: NSView {
     static let size = NSSize(width: 18, height: 24)
 
-    private let palette: BlueprintPalette
+    var palette: BlueprintPalette {
+        didSet { needsDisplay = true }
+    }
     var blockID: BlockID?
     var onClick: ((BlockHandleView) -> Void)?
     private var isHovered = false {

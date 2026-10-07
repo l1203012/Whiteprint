@@ -2,6 +2,7 @@ import AppKit
 import WhiteprintEditor
 import WhiteprintBridge
 import WhiteprintCore
+import WhiteprintRender
 import WhiteprintStudy
 
 /// App lifecycle: menus, the bridge server, the notes folder and the
@@ -121,6 +122,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         ViewPreferences.shared.layoutMode = mode
     }
 
+    @IBAction func setPageTheme(_ sender: Any?) {
+        guard let raw = (sender as? NSMenuItem)?.representedObject as? String,
+              let theme = PageTheme(rawValue: raw) else { return }
+        ViewPreferences.shared.pageTheme = theme
+    }
+
     @IBAction func toggleMarkdownSyntax(_ sender: Any?) {
         ViewPreferences.shared.showsMarkdownSyntax.toggle()
     }
@@ -129,6 +136,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         switch item.action {
         case #selector(setPageLayout(_:)):
             item.state = item.representedObject as? String == ViewPreferences.shared.layoutMode.rawValue ? .on : .off
+        case #selector(setPageTheme(_:)):
+            item.state = item.representedObject as? String == ViewPreferences.shared.pageTheme.rawValue ? .on : .off
         case #selector(toggleMarkdownSyntax(_:)):
             item.state = ViewPreferences.shared.showsMarkdownSyntax ? .on : .off
         default:

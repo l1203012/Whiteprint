@@ -16,10 +16,11 @@ final class NoteWindowController: NSWindowController, NSWindowDelegate, NSToolba
     private var observers: [NSObjectProtocol] = []
     private let touchBarProvider = NoteTouchBar()
     private(set) var visiblePage = 1
+    private var pageTheme = ViewPreferences.shared.pageTheme
 
     init(document: NoteDocument) {
         noteDocument = document
-        editor = NoteEditorView(note: document.note)
+        editor = NoteEditorView(note: document.note, palette: pageTheme.palette)
         sidebar = SidebarViewController()
 
         let window = NSWindow(
@@ -110,6 +111,11 @@ final class NoteWindowController: NSWindowController, NSWindowDelegate, NSToolba
     private func applyViewPreferences() {
         let preferences = ViewPreferences.shared
         if editor.layoutMode != preferences.layoutMode { editor.layoutMode = preferences.layoutMode }
+        if pageTheme != preferences.pageTheme {
+            pageTheme = preferences.pageTheme
+            editor.palette = pageTheme.palette
+            sidebar.pageThemeDidChange()
+        }
         if editor.showsMarkdownSyntax != preferences.showsMarkdownSyntax {
             editor.showsMarkdownSyntax = preferences.showsMarkdownSyntax
         }

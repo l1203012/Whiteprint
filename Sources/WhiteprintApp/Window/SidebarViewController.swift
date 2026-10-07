@@ -122,6 +122,14 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         }
     }
 
+    /// Redraws the page thumbnails in the new theme's colours.
+    func pageThemeDidChange() {
+        guard isViewLoaded else { return }
+        thumbnails = [:]
+        outline.reloadItem(pages, reloadChildren: true)
+        selectCurrentNote()
+    }
+
     func visiblePageDidChange() {
         guard isViewLoaded else { return }
         outline.reloadItem(pages, reloadChildren: true)
@@ -217,7 +225,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         guard let note = windowController?.note, number <= note.pages.count else { return nil }
         let page = note.pages[number - 1]
         if let cached = thumbnails[number], cached.page == page { return cached.image }
-        let image = PageThumbnail.image(for: page, size: Self.thumbnailSize)
+        let image = PageThumbnail.image(for: page, size: Self.thumbnailSize, palette: ViewPreferences.shared.pageTheme.palette)
         thumbnails[number] = (page, image)
         return image
     }

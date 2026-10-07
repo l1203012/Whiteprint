@@ -1,5 +1,6 @@
 import Foundation
 import WhiteprintEditor
+import WhiteprintRender
 
 extension Notification.Name {
     /// Posted when a view preference changes; every open editor applies it.
@@ -12,6 +13,7 @@ final class ViewPreferences {
 
     static let layoutKey = "PageLayout"
     static let syntaxKey = "ShowMarkdownSyntax"
+    static let themeKey = "PageTheme"
 
     private let defaults: UserDefaults
 
@@ -33,6 +35,15 @@ final class ViewPreferences {
         set {
             guard newValue != showsMarkdownSyntax else { return }
             defaults.set(newValue, forKey: Self.syntaxKey)
+            changed()
+        }
+    }
+
+    var pageTheme: PageTheme {
+        get { defaults.string(forKey: Self.themeKey).flatMap(PageTheme.init(rawValue:)) ?? .default }
+        set {
+            guard newValue != pageTheme else { return }
+            defaults.set(newValue.rawValue, forKey: Self.themeKey)
             changed()
         }
     }

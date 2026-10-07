@@ -46,7 +46,9 @@ public enum PageThumbnail {
         let scale = size.width / pageWidth
         var spacing = SceneRenderer.unit * scale
         while spacing < 4 { spacing *= 2 }
-        strokeGrid(in: context, size: size, spacing: spacing, color: palette.grid)
+        if palette.showsGrid {
+            strokeGrid(in: context, size: size, spacing: spacing, color: palette.grid)
+        }
 
         context.scaleBy(x: scale, y: scale)
         var layout = ThumbnailLayout(
