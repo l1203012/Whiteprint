@@ -111,14 +111,17 @@ final class PDFExporterTests: XCTestCase {
     func testBlueprintPagesHaveATitleBlockAndPrintPagesANumber() throws {
         let note = Note(title: "Survey", pages: [NotePage(blocks: [.text("one")]), NotePage(blocks: [.text("two")])])
         let blueprint = try document(note)
-        let last = try XCTUnwrap(blueprint.page(at: 1)?.string)
-        XCTAssertTrue(last.contains("Survey"))
-        XCTAssertTrue(last.contains("2/2"), "page n / N, read out without spaces")
-        XCTAssertTrue(last.contains("2026-09-21"))
-        XCTAssertTrue(last.contains("WHITEPRINT"))
-        let print = try XCTUnwrap(try document(note, style: .print).page(at: 1)?.string)
-        XCTAssertFalse(print.contains("WHITEPRINT"))
-        XCTAssertTrue(print.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("2"))
+        // PDFKit guesses word spaces from the gaps between glyphs, and the guess
+        // varies by macOS version: "2 / 2" and the letter-spaced "WHITEPRINT"
+        // come out with or without spaces. Compare the text without whitespace.
+        let last = try XCTUnwrap(blueprint.page(at: 1)?.string).filter { !$0.isWhitespace }
+        XCTAssertTrue(last.contains("Survey"), last)
+        XCTAssertTrue(last.contains("2/2"), "page n / N: \(last)")
+        XCTAssertTrue(last.contains("2026-09-21"), last)
+        XCTAssertTrue(last.contains("WHITEPRINT"), last)
+        let print = try XCTUnwrap(try document(note, style: .print).page(at: 1)?.string).filter { !$0.isWhitespace }
+        XCTAssertFalse(print.contains("WHITEPRINT"), print)
+        XCTAssertTrue(print.hasSuffix("2"), print)
     }
 
     /// Viewers split copied text into fragments when hundreds of stroked
