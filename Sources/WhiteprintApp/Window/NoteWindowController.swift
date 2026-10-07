@@ -2,17 +2,29 @@ import AppKit
 import WhiteprintCore
 import WhiteprintEditor
 
-/// One note's window: sidebar, slim breadcrumb toolbar and the editor. Note
-/// windows open as tabs of the frontmost note window.
+/// One note's window: the editor on the page colour, the sidebar as a
+/// floating glass panel, and glass pills in the titlebar (sidebar toggle,
+/// the open notes, Markdown lens and More). Note windows open as tabs of the
+/// frontmost note window; the tab strip pill stands in for the system tab bar.
 final class NoteWindowController: NSWindowController, NSWindowDelegate, NSToolbarDelegate, NSMenuItemValidation {
     static let tabbingIdentifier = "io.github.l1203012.whiteprint.note"
-    /// The tab bar is shown once per launch; after that it's the user's to hide.
-    private static var hasShownTabBar = false
 
     private(set) weak var noteDocument: NoteDocument?
     private let editor: NoteEditorView
     private let sidebar: SidebarViewController
-    private let breadcrumb = NSTextField(labelWithString: "")
+    private let split = ChromeSplitViewController()
+    private let editorController: EditorViewController
+    private let sidebarPanel: GlassPanelController
+    private lazy var sidebarButton = ChromeButton(symbol: "sidebar.left", size: NSSize(width: 30, height: 30), label: "Toggle Sidebar",
+                                                  target: nil, action: #selector(NSSplitViewController.toggleSidebar(_:)))
+    private let tabStrip = NoteTabStrip()
+    private lazy var lensButton = ChromeButton(title: "MD", size: NSSize(width: 38, height: 30), label: "Show Markdown",
+                                               target: self, action: #selector(toggleMarkdownLens(_:)))
+    private lazy var moreButton = ChromeButton(symbol: "ellipsis", size: NSSize(width: 30, height: 30), label: "More",
+                                               target: self, action: #selector(showMoreMenu(_:)))
+    /// Pushes the tab strip past the open sidebar panel.
+    private let titleSpacer = NSView()
+    private lazy var titleSpacerWidth = titleSpacer.widthAnchor.constraint(equalToConstant: 0)
     private var observers: [NSObjectProtocol] = []
     private let touchBarProvider = NoteTouchBar()
     private(set) var visiblePage = 1
@@ -22,6 +34,8 @@ final class NoteWindowController: NSWindowController, NSWindowDelegate, NSToolba
         noteDocument = document
         editor = NoteEditorView(note: document.note, palette: pageTheme.palette)
         sidebar = SidebarViewController()
+        editorController = EditorViewController(editor: editor)
+        sidebarPanel = GlassPanelController(content: sidebar)
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1080, height: 760),
@@ -30,17 +44,19 @@ final class NoteWindowController: NSWindowController, NSWindowDelegate, NSToolba
         )
         window.minSize = NSSize(width: 560, height: 420)
         window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.titlebarSeparatorStyle = .none
+        window.backgroundColor = pageTheme.palette.canvas
         window.toolbarStyle = .unified
         window.tabbingMode = .preferred
         window.tabbingIdentifier = Self.tabbingIdentifier
 
-        let split = NSSplitViewController()
-        let sidebarItem = NSSplitViewItem(sidebarWithViewController: sidebar)
-        sidebarItem.minimumThickness = 200
-        sidebarItem.maximumThickness = 340
+        let sidebarItem = NSSplitViewItem(viewController: sidebarPanel)
+        sidebarItem.minimumThickness = 232
+        sidebarItem.maximumThickness = 360
         sidebarItem.canCollapse = true
         split.addSplitViewItem(sidebarItem)
-        let contentItem = NSSplitViewItem(viewController: EditorViewController(editor: editor))
+        let contentItem = NSSplitViewItem(viewController: editorController)
         contentItem.minimumThickness = 360
         split.addSplitViewItem(contentItem)
         split.splitView.autosaveName = "NoteWindowSplit"
@@ -58,8 +74,11 @@ final class NoteWindowController: NSWindowController, NSWindowDelegate, NSToolba
         toolbar.allowsUserCustomization = false
         window.toolbar = toolbar
 
-        breadcrumb.lineBreakMode = .byTruncatingMiddle
-        breadcrumb.widthAnchor.constraint(lessThanOrEqualToConstant: 520).isActive = true
+        sidebarButton.setAccessibilityLabel("Toggle Sidebar")
+        lensButton.fillsWhenOn = true
+        tabStrip.onClickSelected = { [weak self] tab in self?.showTitleMenu(from: tab) }
+        tabStrip.onSelect = { window in window.tabGroup?.selectedWindow = window }
+        titleSpacerWidth.isActive = true
 
         sidebar.windowController = self
         editor.onChange = { [weak document] note in document?.editorDidChange(note) }
@@ -71,14 +90,25 @@ final class NoteWindowController: NSWindowController, NSWindowDelegate, NSToolba
                 self?.documentChanged(origin: notification.userInfo?["origin"] as? NoteDocument.ChangeOrigin)
             },
             center.addObserver(forName: .noteDocumentDidMove, object: document, queue: .main) { [weak self] _ in
-                self?.updateBreadcrumb()
+                self?.updateTitle()
             },
             center.addObserver(forName: .viewPreferencesDidChange, object: nil, queue: .main) { [weak self] _ in
                 self?.applyViewPreferences()
             },
+            center.addObserver(forName: .noteTabsDidChange, object: nil, queue: .main) { [weak self] _ in
+                self?.updateTabs()
+            },
+            center.addObserver(forName: NSWindow.willCloseNotification, object: nil, queue: .main) { [weak self] _ in
+                // The closing window is still in its tab group until this returns.
+                DispatchQueue.main.async { self?.updateTabs() }
+            },
+            center.addObserver(forName: NSSplitView.didResizeSubviewsNotification, object: split.splitView, queue: .main) { [weak self] _ in
+                self?.updateChromeForSidebar()
+            },
         ]
         applyViewPreferences()
-        updateBreadcrumb()
+        updateTitle()
+        updateStatus()
         sidebar.reloadAll()
     }
 
@@ -102,10 +132,47 @@ final class NoteWindowController: NSWindowController, NSWindowDelegate, NSToolba
             host.addTabbedWindow(window, ordered: .above)
         }
         super.showWindow(sender)
-        if !Self.hasShownTabBar, let window, let group = window.tabGroup {
-            Self.hasShownTabBar = true
-            if !group.isTabBarVisible { window.toggleTabBar(nil) }
+        if let window, window.tabGroup?.isTabBarVisible == true {
+            window.toggleTabBar(nil)
         }
+        NotificationCenter.default.post(name: .noteTabsDidChange, object: self)
+    }
+
+    /// Hides the system tab bar, which the tab strip replaces. AppKit won't
+    /// hide it while a window has several tabs, so its view is hidden instead
+    /// and the content moves up into its place. Should a later macOS lay the
+    /// titlebar out differently, the system bar simply shows again.
+    private func hideSystemTabBar() {
+        guard let frame = window?.contentView?.superview else { return }
+        var height: CGFloat = 0
+        for bar in Self.subviews(of: frame) where NSStringFromClass(type(of: bar)).contains("TabBar") && !(bar is NoteTabStrip) {
+            height = max(height, bar.frame.height)
+            bar.isHidden = true
+        }
+        let visible = window?.tabGroup?.isTabBarVisible == true
+        editorController.tabBarOffset = visible ? height : 0
+        sidebarPanel.tabBarOffset = visible ? height : 0
+    }
+
+    private static func subviews(of view: NSView) -> [NSView] {
+        view.subviews + view.subviews.flatMap(subviews(of:))
+    }
+
+    /// Lists this window's tab group in the tab strip.
+    private func updateTabs() {
+        // Touching a window's tab group before it's shown can order it in on
+        // its own, and then it no longer joins the front window as a tab.
+        guard let window, window.isVisible else { return }
+        DispatchQueue.main.async { [weak self] in self?.hideSystemTabBar() }
+        let windows = window.tabbedWindows ?? [window]
+        tabStrip.tabs = windows.map { tab in
+            let controller = tab.windowController as? NoteWindowController
+            return NoteTabStrip.Tab(window: tab, title: controller?.noteDocument?.displayName ?? tab.title,
+                                    isEdited: tab.isDocumentEdited)
+        }
+        tabStrip.selected = window
+        // The strip's width changed; keep it clear of the sidebar panel.
+        updateChromeForSidebar()
     }
 
     private func applyViewPreferences() {
@@ -114,12 +181,22 @@ final class NoteWindowController: NSWindowController, NSWindowDelegate, NSToolba
         if pageTheme != preferences.pageTheme {
             pageTheme = preferences.pageTheme
             editor.palette = pageTheme.palette
+            window?.backgroundColor = pageTheme.palette.canvas
             sidebar.pageThemeDidChange()
         }
         if editor.showsMarkdownSyntax != preferences.showsMarkdownSyntax {
             editor.showsMarkdownSyntax = preferences.showsMarkdownSyntax
         }
         editor.showsCoverAndIcon = preferences.showsCoversAndIcons
+        lensButton.isOn = preferences.showsMarkdownSyntax
+        updateStatus()
+    }
+
+    /// "1,284 words · Rendered", in the pill at the bottom right.
+    private func updateStatus() {
+        let words = note.wordCount
+        let count = words == 1 ? "1 word" : "\(words.formatted()) words"
+        editorController.status = count + " · " + (ViewPreferences.shared.showsMarkdownSyntax ? "Markdown" : "Rendered")
     }
 
     private func documentChanged(origin: NoteDocument.ChangeOrigin?) {
@@ -128,14 +205,15 @@ final class NoteWindowController: NSWindowController, NSWindowDelegate, NSToolba
             editor.setNote(note, preservingSelection: true)
         }
         visiblePage = min(visiblePage, note.pages.count)
-        updateBreadcrumb()
+        updateTitle()
+        updateStatus()
         sidebar.noteDidChange()
     }
 
     private func visiblePageChanged(_ page: Int) {
         guard page != visiblePage else { return }
         visiblePage = page
-        updateBreadcrumb()
+        updateTitle()
         sidebar.visiblePageDidChange()
     }
 
@@ -153,31 +231,60 @@ final class NoteWindowController: NSWindowController, NSWindowDelegate, NSToolba
         sidebar.selectedFolder
     }
 
-    private func updateBreadcrumb() {
-        let muted: [NSAttributedString.Key: Any] = [
-            .foregroundColor: NSColor.secondaryLabelColor,
-            .font: NSFont.systemFont(ofSize: 13),
-        ]
-        let strong: [NSAttributedString.Key: Any] = [
-            .foregroundColor: NSColor.labelColor,
-            .font: NSFont.systemFont(ofSize: 13, weight: .medium),
-        ]
+    /// The note's folder as the tab strip's tooltip; its name shows in the strip.
+    private func updateTitle() {
         let folders = noteDocument?.fileURL.flatMap(AppServices.shared.library.folder.relativeFolder(of:)) ?? ""
-        let trail = (["Notes"] + folders.split(separator: "/").map(String.init)).joined(separator: "  /  ")
-        let text = NSMutableAttributedString(string: trail + "  /  ", attributes: muted)
-        text.append(NSAttributedString(string: noteDocument?.title ?? NoteTitle.untitled, attributes: strong))
-        if note.pages.count > 1 {
-            text.append(NSAttributedString(string: "  /  Page \(visiblePage)", attributes: muted))
-        }
-        breadcrumb.attributedStringValue = text
+        tabStrip.toolTip = (["Notes"] + folders.split(separator: "/").map(String.init)).joined(separator: " / ")
+        NotificationCenter.default.post(name: .noteTabsDidChange, object: self)
+    }
+
+    override func setDocumentEdited(_ dirtyFlag: Bool) {
+        super.setDocumentEdited(dirtyFlag)
+        NotificationCenter.default.post(name: .noteTabsDidChange, object: self)
     }
 
     override func synchronizeWindowTitleWithDocumentName() {
         super.synchronizeWindowTitleWithDocumentName()
-        updateBreadcrumb()
+        updateTitle()
     }
 
     // MARK: Actions
+
+    @IBAction func toggleMarkdownLens(_ sender: Any?) {
+        ViewPreferences.shared.showsMarkdownSyntax.toggle()
+    }
+
+    @IBAction func showMoreMenu(_ sender: Any?) {
+        let menu = Self.moreMenu()
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: moreButton.bounds.height + 6), in: moreButton)
+    }
+
+    private func showTitleMenu(from pill: NSView) {
+        let menu = NSMenu()
+        menu.addItem(withTitle: "Rename…", action: #selector(NSDocument.rename(_:)), keyEquivalent: "")
+        menu.addItem(withTitle: "Move To…", action: #selector(NSDocument.move(_:)), keyEquivalent: "")
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "Show in Finder", action: #selector(NoteDocument.showInFinder(_:)), keyEquivalent: "")
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: pill.bounds.height + 6), in: pill)
+    }
+
+    /// Moves the tab strip to just past the sidebar panel while it's open.
+    private func updateChromeForSidebar() {
+        let open = split.splitViewItems.first.map { !$0.isCollapsed } ?? false
+        sidebarButton.isOn = open
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.window?.isVisible == true else { return }
+            guard open, let panel = self.split.splitViewItems.first?.viewController.view else {
+                self.titleSpacerWidth.constant = 0
+                return
+            }
+            // Measure with the toolbar laid out, so repeated calls give the same width.
+            self.window?.contentView?.superview?.layoutSubtreeIfNeeded()
+            let target = panel.convert(panel.bounds, to: nil).maxX + 12
+            let withoutSpacer = self.tabStrip.convert(self.tabStrip.bounds, to: nil).minX - self.titleSpacerWidth.constant
+            self.titleSpacerWidth.constant = max(0, (target - withoutSpacer).rounded())
+        }
+    }
 
     @IBAction func addPage(_ sender: Any?) {
         editor.addPage()
@@ -234,6 +341,17 @@ final class NoteWindowController: NSWindowController, NSWindowDelegate, NSToolba
 
     func windowDidBecomeMain(_ notification: Notification) {
         sidebar.reloadAll()
+        updateChromeForSidebar()
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        updateChromeForSidebar()
+        hideSystemTabBar()
+    }
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        hideSystemTabBar()
+        tabStrip.selectionDidAppear()
     }
 
     // MARK: Touch Bar
@@ -244,11 +362,13 @@ final class NoteWindowController: NSWindowController, NSWindowDelegate, NSToolba
 
     // MARK: Toolbar
 
-    private static let breadcrumbID = NSToolbarItem.Identifier("breadcrumb")
-    private static let moreID = NSToolbarItem.Identifier("more")
+    private static let sidebarID = NSToolbarItem.Identifier("sidebar")
+    private static let spacerID = NSToolbarItem.Identifier("titleSpacer")
+    private static let titleID = NSToolbarItem.Identifier("title")
+    private static let lensID = NSToolbarItem.Identifier("lens")
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.toggleSidebar, .sidebarTrackingSeparator, Self.breadcrumbID, .flexibleSpace, Self.moreID]
+        [Self.sidebarID, Self.spacerID, Self.titleID, .flexibleSpace, Self.lensID]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -256,23 +376,24 @@ final class NoteWindowController: NSWindowController, NSWindowDelegate, NSToolba
     }
 
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier id: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
+        let item = NSToolbarItem(itemIdentifier: id)
         switch id {
-        case Self.breadcrumbID:
-            let item = NSToolbarItem(itemIdentifier: id)
-            item.view = breadcrumb
-            item.label = "Location"
-            return item
-        case Self.moreID:
-            let item = NSMenuToolbarItem(itemIdentifier: id)
-            item.image = NSImage(systemSymbolName: "ellipsis.circle", accessibilityDescription: "More")
-            item.label = "More"
-            item.toolTip = "Export, pages and more"
-            item.showsIndicator = false
-            item.menu = Self.moreMenu()
-            return item
+        case Self.sidebarID:
+            item.view = GlassView.wrapping([sidebarButton])
+            item.label = "Sidebar"
+        case Self.spacerID:
+            item.view = titleSpacer
+            item.label = ""
+        case Self.titleID:
+            item.view = tabStrip
+            item.label = "Open Notes"
+        case Self.lensID:
+            item.view = GlassView.wrapping([lensButton, moreButton])
+            item.label = "Markdown and More"
         default:
             return nil
         }
+        return item
     }
 
     private static func moreMenu() -> NSMenu {
@@ -293,9 +414,22 @@ final class NoteWindowController: NSWindowController, NSWindowDelegate, NSToolba
     }
 }
 
-/// Hosts the editor, edge to edge, under the transparent toolbar.
+/// Hosts the editor, edge to edge below the titlebar, with the word count
+/// pill floating at the bottom right.
 final class EditorViewController: NSViewController {
     private let editor: NoteEditorView
+    private let statusLabel = NSTextField(labelWithString: "")
+    private var top: NSLayoutConstraint?
+
+    /// The height of the hidden system tab bar, which the editor moves up into.
+    var tabBarOffset: CGFloat = 0 {
+        didSet { top?.constant = -tabBarOffset }
+    }
+
+    var status: String {
+        get { statusLabel.stringValue }
+        set { statusLabel.stringValue = newValue }
+    }
 
     init(editor: NoteEditorView) {
         self.editor = editor
@@ -314,9 +448,25 @@ final class EditorViewController: NSViewController {
         NSLayoutConstraint.activate([
             editor.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             editor.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            editor.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor),
             editor.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
+        statusLabel.font = .systemFont(ofSize: 11.5)
+        statusLabel.textColor = .secondaryLabelColor
+        let pill = GlassView()
+        pill.translatesAutoresizingMaskIntoConstraints = false
+        statusLabel.translatesAutoresizingMaskIntoConstraints = false
+        pill.addSubview(statusLabel)
+        container.addSubview(pill)
+        NSLayoutConstraint.activate([
+            statusLabel.leadingAnchor.constraint(equalTo: pill.leadingAnchor, constant: 12),
+            statusLabel.trailingAnchor.constraint(equalTo: pill.trailingAnchor, constant: -12),
+            statusLabel.centerYAnchor.constraint(equalTo: pill.centerYAnchor),
+            pill.heightAnchor.constraint(equalToConstant: 28),
+            pill.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
+            pill.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -14),
+        ])
+        top = editor.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor, constant: -tabBarOffset)
+        top?.isActive = true
         view = container
     }
 }

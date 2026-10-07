@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(Whiteprint VERSION 0.2.0 LANGUAGES CXX)
+project(Whiteprint VERSION 0.2.1 LANGUAGES CXX)
 
 # Windows port of Whiteprint. The macOS sources (../Sources, ../Package.swift) are the reference and
 # are never modified from here. See ../docs/WINDOWS_PORT.md for the module map and conventions.

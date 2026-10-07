@@ -169,6 +169,9 @@ enum MainMenu {
         menu.addItem(item("Minimize", #selector(NSWindow.performMiniaturize(_:)), "m"))
         menu.addItem(item("Zoom", #selector(NSWindow.performZoom(_:))))
         menu.addItem(.separator())
+        menu.addItem(item("Show Previous Tab", #selector(NSWindow.selectPreviousTab(_:)), "[", [.command, .shift]))
+        menu.addItem(item("Show Next Tab", #selector(NSWindow.selectNextTab(_:)), "]", [.command, .shift]))
+        menu.addItem(.separator())
         menu.addItem(item("Bring All to Front", #selector(NSApplication.arrangeInFront(_:))))
         return menu
     }
