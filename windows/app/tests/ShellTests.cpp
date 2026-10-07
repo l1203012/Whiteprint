@@ -106,6 +106,8 @@ private slots:
         QCOMPARE(nodes[0].path, QStringLiteral("Courses"));
         QCOMPARE(nodes[0].url, QStringLiteral("/n/Courses"));
         QCOMPARE(titles(nodes[0].children), (QStringList{"B"}));
+        QVERIFY(nodes[0].isExpandable());
+        QVERIFY(!nodes[1].isExpandable());
         QVERIFY(nodes[2].isNote());
         QCOMPARE(*nodes[2].noteURL(), QStringLiteral("/n/A.wprint"));
         QVERIFY(SidebarModel::find(nodes, [](const SidebarNode &n) { return n.title == "B"; }));
@@ -258,6 +260,9 @@ private slots:
         QVERIFY(sidebar.expandedFolders().contains("Courses"));
         sidebar.toggleExpansion(courses);
         QVERIFY(!sidebar.expandedFolders().contains("Courses"));
+        // An empty folder has nothing to expand.
+        sidebar.toggleExpansion(sidebar.item([](const SidebarNode &n) { return n.title == "Empty"; }));
+        QVERIFY(!sidebar.expandedFolders().contains("Empty"));
         sidebar.setExpandedFolders({"Courses", "Courses/Networks"});
         sidebar.reloadAll();
         courses = sidebar.item([](const SidebarNode &n) { return n.title == "Courses"; });
