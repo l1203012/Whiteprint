@@ -119,6 +119,7 @@ final class NoteWindowController: NSWindowController, NSWindowDelegate, NSToolba
         if editor.showsMarkdownSyntax != preferences.showsMarkdownSyntax {
             editor.showsMarkdownSyntax = preferences.showsMarkdownSyntax
         }
+        editor.showsCoverAndIcon = preferences.showsCoversAndIcons
     }
 
     private func documentChanged(origin: NoteDocument.ChangeOrigin?) {

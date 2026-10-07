@@ -14,6 +14,7 @@ final class ViewPreferences {
     static let layoutKey = "PageLayout"
     static let syntaxKey = "ShowMarkdownSyntax"
     static let themeKey = "PageTheme"
+    static let coversKey = "ShowCoversAndIcons"
 
     private let defaults: UserDefaults
 
@@ -44,6 +45,16 @@ final class ViewPreferences {
         set {
             guard newValue != pageTheme else { return }
             defaults.set(newValue.rawValue, forKey: Self.themeKey)
+            changed()
+        }
+    }
+
+    /// Whether notes show their cover banner and page icon (the default).
+    var showsCoversAndIcons: Bool {
+        get { defaults.object(forKey: Self.coversKey) as? Bool ?? true }
+        set {
+            guard newValue != showsCoversAndIcons else { return }
+            defaults.set(newValue, forKey: Self.coversKey)
             changed()
         }
     }

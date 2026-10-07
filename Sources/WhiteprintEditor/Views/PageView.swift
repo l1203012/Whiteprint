@@ -24,6 +24,14 @@ final class PageView: NSView {
     var estimatedWidth: CGFloat = 0
     /// Called for clicks on the sheet outside any block.
     var onClickBelowBlocks: ((PageView) -> Void)?
+    /// The cover and icon above the blocks; only the first page has one.
+    var header: PageHeaderView? {
+        didSet {
+            guard header !== oldValue else { return }
+            if oldValue?.superview === self { oldValue?.removeFromSuperview() }
+            if let header { addSubview(header) }
+        }
+    }
 
     private(set) var blockViews: [NSView] = []
     /// Offsets from the sheet top where printed pages break.
@@ -66,7 +74,16 @@ final class PageView: NSView {
     /// Lays the blocks out top to bottom and returns the sheet height.
     func layoutBlocks(_ geometry: PageGeometry) -> CGFloat {
         let inset = PageGeometry.shadowInset
-        let top = inset + geometry.topPadding
+        var headerHeight: CGFloat = 0
+        if let header {
+            header.contentInset = geometry.padding
+            header.topPadding = geometry.topPadding
+            let frame = NSRect(x: inset, y: inset, width: geometry.pageWidth,
+                               height: header.height(forWidth: geometry.pageWidth))
+            if header.frame != frame { header.frame = frame }
+            headerHeight = frame.height - geometry.topPadding
+        }
+        let top = inset + geometry.topPadding + headerHeight
         var y = top
         if isRealized {
             for (i, view) in blockViews.enumerated() {
@@ -95,7 +112,7 @@ final class PageView: NSView {
         } else {
             y += estimatedContentHeight
         }
-        let sheet = geometry.sheet(contentHeight: y - top)
+        let sheet = geometry.sheet(contentHeight: y - top, headerHeight: headerHeight)
         pageBreaks = sheet.breaks
         return sheet.height
     }

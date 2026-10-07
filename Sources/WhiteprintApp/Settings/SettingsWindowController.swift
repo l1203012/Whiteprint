@@ -324,6 +324,7 @@ private final class AISettingsViewController: SettingsPane {
 
 private final class AppearanceSettingsViewController: SettingsPane {
     private let themePopup = NSPopUpButton()
+    private let coversCheckbox = NSButton(checkboxWithTitle: "Show covers and page icons", target: nil, action: nil)
     private var observer: NSObjectProtocol?
 
     deinit {
@@ -337,6 +338,12 @@ private final class AppearanceSettingsViewController: SettingsPane {
         themePopup.target = self
         themePopup.action = #selector(themeChanged(_:))
         row(themePopup)
+        header("Covers and icons")
+        note("A note can have a banner across its first page and an emoji beside its title. "
+            + "When hidden, they stay saved in the note.")
+        coversCheckbox.target = self
+        coversCheckbox.action = #selector(coversChanged(_:))
+        row(coversCheckbox)
         update()
         observer = NotificationCenter.default.addObserver(forName: .viewPreferencesDidChange, object: nil, queue: .main) { [weak self] _ in
             self?.update()
@@ -345,6 +352,11 @@ private final class AppearanceSettingsViewController: SettingsPane {
 
     private func update() {
         themePopup.selectItem(at: PageTheme.allCases.firstIndex(of: ViewPreferences.shared.pageTheme) ?? 0)
+        coversCheckbox.state = ViewPreferences.shared.showsCoversAndIcons ? .on : .off
+    }
+
+    @objc private func coversChanged(_ sender: NSButton) {
+        ViewPreferences.shared.showsCoversAndIcons = sender.state == .on
     }
 
     @objc private func themeChanged(_ sender: NSPopUpButton) {

@@ -68,6 +68,12 @@ struct EditorDocument: Equatable {
         self.init(note: note, lastID: 0)
     }
 
+    /// The note's front matter, e.g. its icon and cover.
+    var frontMatter: FrontMatter {
+        get { base.frontMatter }
+        set { base.frontMatter = newValue }
+    }
+
     /// The note as it would be saved.
     var note: Note {
         var note = base

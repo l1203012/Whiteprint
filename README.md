@@ -533,6 +533,10 @@ matter, Markdown, `+++page` between pages, and fenced `wp` (drawing) and `cards`
 blocks. It diffs well, syncs with anything that syncs files, and Claude can read and edit it cheaply.
 The format is identical on macOS and Windows.
 
+Two optional front matter fields dress up a note's first page on macOS: `icon:` holds an emoji shown
+above the title, and `cover:` names a banner from the built-in gallery of public domain paintings
+(`Resources/Covers`, e.g. `cover: monet-water-lilies`).
+
 ````text
 ---
 whiteprint: 1
