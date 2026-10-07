@@ -44,11 +44,25 @@ public final class NoteEditorView: NSView {
         }
     }
 
+    /// Whether the note's cover banner and icon show above the first page's
+    /// blocks, with buttons to add them on hover. Hiding them keeps them in the file.
+    public var showsCoverAndIcon = true {
+        didSet {
+            guard showsCoverAndIcon != oldValue else { return }
+            keepingTopBlockInPlace {
+                updatePageHeader()
+                needsLayout = true
+                layoutSubtreeIfNeeded()
+            }
+        }
+    }
+
     /// The page colours; changing it restyles every page in place.
     public var palette: BlueprintPalette {
         didSet {
             scrollView.backgroundColor = palette.canvas
             handle.palette = palette
+            coverHeader.palette = palette
             for view in pageViews { view.palette = palette }
             for view in textViews.values { view.palette = palette }
             for view in drawingViews.values { view.palette = palette }
@@ -61,6 +75,7 @@ public final class NoteEditorView: NSView {
     let scrollView = NSScrollView()
     let documentView = EditorDocumentView()
     let handle: BlockHandleView
+    let coverHeader: PageHeaderView
     let slashMenuView = SlashMenuView()
     var slashMenu: (block: BlockID, state: SlashMenuState)?
     /// A `/` just typed at this place opens the menu once the edit lands.
@@ -90,6 +105,7 @@ public final class NoteEditorView: NSView {
         document = EditorDocument(note: note)
         self.note = document.note
         handle = BlockHandleView(palette: palette)
+        coverHeader = PageHeaderView(palette: palette)
         super.init(frame: .zero)
         textRouter.editor = self
         setUpViews()
@@ -213,6 +229,7 @@ public final class NoteEditorView: NSView {
         documentView.onMouseMoved = { [weak self] point in self?.updateHandle(at: point) }
         documentView.onMouseExited = { [weak self] in self?.handle.hide() }
         handle.onClick = { [weak self] handle in self?.showBlockMenu(from: handle) }
+        setUpPageHeader()
     }
 
     public override func layout() {
@@ -375,6 +392,7 @@ public final class NoteEditorView: NSView {
             documentView.addSubview(view, positioned: .below, relativeTo: handle)
         }
         pageViews = views
+        updatePageHeader()
         layoutDocument()
         realizeVisiblePages()
     }

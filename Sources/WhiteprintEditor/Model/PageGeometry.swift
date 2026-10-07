@@ -88,13 +88,15 @@ struct PageGeometry: Equatable {
 
     /// The height of a sheet holding `contentHeight` of blocks, and the
     /// offsets from its top where printed pages break (A4 only).
-    func sheet(contentHeight: CGFloat) -> (height: CGFloat, breaks: [CGFloat]) {
+    /// `headerHeight` (a cover and icon) goes above the blocks; print
+    /// doesn't have it, so the breaks move down with the text.
+    func sheet(contentHeight: CGFloat, headerHeight: CGFloat = 0) -> (height: CGFloat, breaks: [CGFloat]) {
         guard let printable = printableHeight, let paperHeight else {
-            return (max(topPadding + contentHeight + bottomPadding, minPageHeight), [])
+            return (max(headerHeight + topPadding + contentHeight + bottomPadding, minPageHeight), [])
         }
         let sheets = max(1, Int((contentHeight / printable - 0.001).rounded(.up)))
-        let breaks = (1..<sheets).map { topPadding + CGFloat($0) * printable }
-        return ((paperHeight + CGFloat(sheets - 1) * printable).rounded(), breaks)
+        let breaks = (1..<sheets).map { headerHeight + topPadding + CGFloat($0) * printable }
+        return ((headerHeight + paperHeight + CGFloat(sheets - 1) * printable).rounded(), breaks)
     }
 }
 
