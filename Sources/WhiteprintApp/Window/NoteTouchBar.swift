@@ -5,6 +5,10 @@ import WhiteprintEditor
 /// formatting items, which appear in the middle while typing. Buttons send
 /// their actions up the responder chain; the layout and syntax controls
 /// change `ViewPreferences` and follow it.
+///
+/// While typing there isn't room for everything, so New Note, the layout
+/// and syntax controls and Study are low priority and give way to the
+/// formatting buttons; the sidebar and palette buttons stay.
 final class NoteTouchBar: NSObject, NSTouchBarDelegate {
     static let customizationID = "io.github.l1203012.whiteprint.note-window"
 
@@ -45,7 +49,18 @@ final class NoteTouchBar: NSObject, NSTouchBarDelegate {
         return bar
     }
 
+    /// The items hidden first when the bar runs out of room.
+    static let lowPriorityItems: Set<NSTouchBarItem.Identifier> = [Item.newNote, Item.layout, Item.syntax, Item.study]
+
     func touchBar(_ touchBar: NSTouchBar, makeItemForIdentifier identifier: NSTouchBarItem.Identifier) -> NSTouchBarItem? {
+        let item = makeItem(identifier)
+        if Self.lowPriorityItems.contains(identifier) {
+            item?.visibilityPriority = .low
+        }
+        return item
+    }
+
+    private func makeItem(_ identifier: NSTouchBarItem.Identifier) -> NSTouchBarItem? {
         switch identifier {
         case Item.newNote:
             return button(identifier, "New Note", "square.and.pencil", #selector(AppDelegate.newNote(_:)))

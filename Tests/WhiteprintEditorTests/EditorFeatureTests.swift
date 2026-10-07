@@ -210,25 +210,52 @@ final class EditorFeatureTests: XCTestCase {
         let view = try focusText(0, 0, caret: 0, length: 4)
         let bar = try XCTUnwrap(view.makeTouchBar())
         XCTAssertEqual(bar.customizationIdentifier, "io.github.l1203012.whiteprint.editor")
-        XCTAssertEqual(bar.defaultItemIdentifiers.count, 9)
+        XCTAssertEqual(bar.defaultItemIdentifiers,
+                       [EditorTouchBar.inline, EditorTouchBar.headings, EditorTouchBar.lists, EditorTouchBar.more])
         XCTAssertTrue(Set(bar.defaultItemIdentifiers).isSubset(of: Set(bar.customizationAllowedItemIdentifiers)))
 
-        let bold = try XCTUnwrap(bar.item(forIdentifier: EditorTouchBar.identifier(for: .bold)) as? NSButtonTouchBarItem)
-        XCTAssertNotNil(bold.image)
-        XCTAssertEqual(bold.customizationLabel, "Bold")
-        NSApp.sendAction(try XCTUnwrap(bold.action), to: bold.target, from: bold)
+        /// Taps a segment of one of the bar's groups.
+        func tap(_ group: NSTouchBarItem.Identifier, _ segment: Int) throws {
+            let item = try XCTUnwrap(bar.item(forIdentifier: group) as? NSCustomTouchBarItem, group.rawValue)
+            XCTAssertEqual(item.visibilityPriority, .high)
+            let control = try XCTUnwrap(item.view as? NSSegmentedControl)
+            XCTAssertEqual(control.trackingMode, .momentary)
+            // A momentary control drops a selection set in code; a tap
+            // leaves it set while the action runs.
+            control.trackingMode = .selectOne
+            defer { control.trackingMode = .momentary }
+            control.selectedSegment = segment
+            NSApp.sendAction(try XCTUnwrap(control.action), to: control.target, from: control)
+        }
+        let inline = try XCTUnwrap((bar.item(forIdentifier: EditorTouchBar.inline) as? NSCustomTouchBarItem)?.view as? NSSegmentedControl)
+        XCTAssertEqual(inline.segmentCount, 3)
+        XCTAssertNotNil(inline.image(forSegment: 0))
+        XCTAssertEqual(inline.toolTip(forSegment: 0), "Bold")
+        try tap(EditorTouchBar.inline, 0)
         XCTAssertEqual(firstPageBlocks, [.text("**word**")])
 
-        let style = try XCTUnwrap(bar.item(forIdentifier: EditorTouchBar.style) as? NSPopoverTouchBarItem)
-        let popover = try XCTUnwrap(style.popoverTouchBar)
-        XCTAssertEqual(popover.defaultItemIdentifiers, [.heading1, .heading2, .heading3, .body].map(EditorTouchBar.identifier(for:)))
-        let h2 = try XCTUnwrap(popover.item(forIdentifier: EditorTouchBar.identifier(for: .heading2)) as? NSButtonTouchBarItem)
-        XCTAssertEqual(h2.title, "H2")
-        NSApp.sendAction(try XCTUnwrap(h2.action), to: h2.target, from: h2)
+        let headings = try XCTUnwrap((bar.item(forIdentifier: EditorTouchBar.headings) as? NSCustomTouchBarItem)?.view as? NSSegmentedControl)
+        XCTAssertEqual((0..<3).map { headings.label(forSegment: $0) }, ["H1", "H2", "H3"])
+        try tap(EditorTouchBar.headings, 1)
         XCTAssertEqual(firstPageBlocks, [.text("## **word**")])
+        try tap(EditorTouchBar.lists, 2)
+        XCTAssertEqual(firstPageBlocks, [.text("- [ ] **word**")])
 
-        for command in EditorTouchBar.buttonCommands {
-            XCTAssertNotNil(bar.item(forIdentifier: EditorTouchBar.identifier(for: command)), command.rawValue)
+        let more = try XCTUnwrap(bar.item(forIdentifier: EditorTouchBar.more) as? NSPopoverTouchBarItem)
+        let popover = try XCTUnwrap(more.popoverTouchBar)
+        XCTAssertEqual(popover.defaultItemIdentifiers, EditorTouchBar.moreCommands.map(EditorTouchBar.identifier(for:)))
+        let body = try XCTUnwrap(popover.item(forIdentifier: EditorTouchBar.identifier(for: .body)) as? NSButtonTouchBarItem)
+        XCTAssertEqual(body.title, "Body")
+        XCTAssertNil(body.image)
+        NSApp.sendAction(try XCTUnwrap(body.action), to: body.target, from: body)
+        XCTAssertEqual(firstPageBlocks, [.text("**word**")])
+
+        // Every command can be added to the bar as a button of its own.
+        for command in EditorCommand.allCases {
+            let id = EditorTouchBar.identifier(for: command)
+            XCTAssertTrue(bar.customizationAllowedItemIdentifiers.contains(id), command.rawValue)
+            let button = try XCTUnwrap(EditorTouchBar(onCommand: { _ in }).touchBar(bar, makeItemForIdentifier: id) as? NSButtonTouchBarItem)
+            XCTAssertEqual(button.customizationLabel, command.title)
         }
     }
 
