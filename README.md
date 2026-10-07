@@ -731,7 +731,7 @@ Planned or under consideration:
 - [ ] Drawings in PDF export
 - [ ] Freehand drawing, and technical sketches with arcs and angles
 - [ ] Images and tables in notes
-- [ ] Automatic updates (Sparkle on macOS)
+- [x] Automatic updates on macOS (checked at launch, from GitHub Releases)
 - [ ] iCloud sync
 - [ ] Day-by-day study schedules from deadlines found in course material
 - [ ] Windows ARM64 build

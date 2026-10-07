@@ -15,6 +15,8 @@
 #   or NOTARY_KEY_PATH, NOTARY_KEY_ID, NOTARY_ISSUER_ID for an App Store Connect API key
 #   DMG_PLAIN=1           skip the Finder window layout (icon positions, background view)
 #   VOLUME_ICON=path.icns   volume icon (default: Resources/App/AppIcon.icns when present)
+#   UPDATE_SIGNING_KEY=base64   Ed25519 key that signs the DMG for in-app updates, written to
+#                         <dmg>.sig; without it the app won't install this DMG as an update
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -202,6 +204,17 @@ notarize() {
     xcrun stapler staple "$DMG"
 }
 
+# After notarization, since stapling changes the DMG.
+sign_update() {
+    rm -f "$DMG.sig"
+    if [ -z "${UPDATE_SIGNING_KEY:-}" ]; then
+        step "Not signing for updates (set UPDATE_SIGNING_KEY; the app only installs signed updates)"
+        return 0
+    fi
+    step "Signing $(basename "$DMG") for in-app updates"
+    swift "$ROOT/Scripts/update-signing.swift" sign "$DMG" > "$DMG.sig"
+}
+
 checksum() {
     (cd "$OUT" && shasum -a 256 "$(basename "$DMG")" > "$(basename "$DMG").sha256")
 }
@@ -210,6 +223,7 @@ build_app
 sign_app
 make_dmg
 notarize
+sign_update
 checksum
 echo "✓ $DMG"
 echo "  $(cut -d' ' -f1 < "$DMG.sha256")  sha256"

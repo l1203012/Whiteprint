@@ -34,6 +34,10 @@
 	<false/>
 	<key>NSSupportsSuddenTermination</key>
 	<false/>
+	<key>WhiteprintUpdateRepository</key>
+	<string>l1203012/Whiteprint</string>
+	<key>WhiteprintUpdatePublicKey</key>
+	<string>jvxCjKyHqdCjv/bjFThMcGDjRPQXLjLGe4f2eTITvrM=</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>

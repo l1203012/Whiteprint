@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
     private var server: BridgeServer?
     private var settings: SettingsWindowController?
     private var reference: NSWindowController?
+    private var updateSplash: SplashWindow?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = MainMenu.make(recentDelegate: self)
@@ -19,7 +20,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         ScreenshotMode.startIfRequested()
+        let environment = ProcessInfo.processInfo.environment
+        let quiet = environment[ScreenshotMode.environmentKey] != nil || environment[SplashWindow.disableEnvironmentKey] != nil
+        let splash = quiet ? nil : SplashWindow(version: Self.version)
+        splash?.show()
+
+        splash?.update("Loading your notes library…", progress: 0.15)
         let services = AppServices.shared
+        splash?.update("Starting the Claude bridge…", progress: 0.3)
         let server = BridgeServer(handler: services.bridge)
         do {
             try server.start()
@@ -29,10 +37,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         }
         // Documents restored or opened from Finder arrive during launch;
         // only show something ourselves when nothing else opened.
-        DispatchQueue.main.async {
-            guard NoteDocuments.open.isEmpty else { return }
-            self.openStartupNote()
-        }    }
+        Task { @MainActor in
+            if let splash, !quiet, Updater.checksOnLaunch, let updater = Updater.make() {
+                await UpdateFlow.run(updater, on: splash, trigger: .launch)
+            }
+            splash?.update("Opening your notes…", progress: 1)
+            if NoteDocuments.open.isEmpty { self.openStartupNote() }
+            await splash?.close()
+        }
+    }
+
+    private static var version: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "development build"
+    }
 
     func applicationWillTerminate(_ notification: Notification) {
         server?.stop()
@@ -162,6 +179,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenu
         if settings == nil { settings = SettingsWindowController() }
         settings?.showWindow(sender)
         settings?.window?.makeKeyAndOrderFront(sender)
+    }
+
+    @IBAction func checkForUpdates(_ sender: Any?) {
+        guard let updater = Updater.make() else {
+            let alert = NSAlert()
+            alert.messageText = "This copy of Whiteprint can't update itself."
+            alert.informativeText = "Updates come to released builds. Development and edge builds are updated by building or downloading a new one."
+            alert.runModal()
+            return
+        }
+        guard updateSplash == nil else { return }
+        let splash = SplashWindow(version: Self.version)
+        updateSplash = splash
+        splash.show()
+        Task { @MainActor in
+            await UpdateFlow.run(updater, on: splash, trigger: .manual)
+            await splash.close(minimum: 0)
+            updateSplash = nil
+        }
     }
 
     @IBAction func showDrawingReference(_ sender: Any?) {
