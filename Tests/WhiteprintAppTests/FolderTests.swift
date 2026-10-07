@@ -133,6 +133,18 @@ final class FolderTreeTests: XCTestCase {
         XCTAssertEqual(courses.folders[0].notes.map(\.title), ["TCP"])
     }
 
+    func testOnlyFoldersWithContentsExpand() {
+        let note = NoteEntry(url: URL(fileURLWithPath: "/notes/Courses/Networks/TCP.wprint"), title: "TCP", pageCount: 1, folder: "Courses/Networks")
+        let tree = NoteTree.build(entries: [note], folders: ["Courses", "Courses/Networks", "Empty"])
+        let nodes = SidebarViewController.nodes(for: tree, root: URL(fileURLWithPath: "/notes", isDirectory: true))
+        XCTAssertEqual(nodes.map(\.folderPath), ["Courses", "Empty"])
+        XCTAssertTrue(nodes[0].isExpandable, "a folder holding only a subfolder")
+        XCTAssertTrue(nodes[0].children[0].isExpandable, "a folder holding a note")
+        XCTAssertFalse(nodes[1].isExpandable, "an empty folder")
+        XCTAssertFalse(nodes[0].children[0].children[0].isExpandable, "a note")
+        XCTAssertTrue(SidebarNode(.section("Notes")).isExpandable, "an empty section")
+    }
+
     func testMergedListsOpenNotesElsewhereLast() {
         let a = URL(fileURLWithPath: "/notes/A.wprint"), b = URL(fileURLWithPath: "/elsewhere/B.wprint")
         XCTAssertEqual(NotesLibrary.merged([a], open: [a, b]), [a, b])

@@ -148,7 +148,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         notes.children = Self.nodes(for: tree, root: library.folder.url)
     }
 
-    private static func nodes(for tree: NoteTree, root: URL) -> [SidebarNode] {
+    static func nodes(for tree: NoteTree, root: URL) -> [SidebarNode] {
         let folders = tree.folders.map { folder -> SidebarNode in
             let node = SidebarNode(.folder(path: folder.path, name: folder.name, url: root.appendingPathComponent(folder.path, isDirectory: true)))
             node.children = nodes(for: folder, root: root)
@@ -513,8 +513,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     }
 
     func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool {
-        guard let node = item as? SidebarNode else { return false }
-        return node.isSection || node.folderPath != nil
+        (item as? SidebarNode)?.isExpandable ?? false
     }
 
     // MARK: NSOutlineViewDelegate
@@ -594,6 +593,12 @@ final class SidebarNode {
     var folderPath: String? {
         if case .folder(let path, _, _) = kind { return path }
         return nil
+    }
+
+    /// Sections always show a disclosure arrow; folders only when they hold
+    /// notes or subfolders, so an empty folder reads as empty.
+    var isExpandable: Bool {
+        isSection || (folderPath != nil && !children.isEmpty)
     }
 
     var noteURL: URL? {

@@ -42,8 +42,8 @@ struct SidebarNode {
     std::optional<QString> noteURL() const { return isNote() ? std::optional<QString>(url) : std::nullopt; }
     /// The file or folder the row stands for (folders and notes only).
     std::optional<QString> fileURL() const { return isFolder() || isNote() ? std::optional<QString>(url) : std::nullopt; }
-    /// Sections and folders expand.
-    bool isExpandable() const { return isSection() || isFolder(); }
+    /// Sections expand, and folders that hold notes or subfolders; an empty folder has no chevron.
+    bool isExpandable() const { return isSection() || (isFolder() && !children.isEmpty()); }
     /// Notes and folders are the selectable rows.
     bool isSelectable() const { return isFolder() || isNote(); }
     /// The trailing text of the row (`12/40` for an import, the cards to study of a deck, ...).

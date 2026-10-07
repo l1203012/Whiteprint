@@ -189,7 +189,7 @@ public:
 
         int x = option.rect.left() + rowInset - 2;
         const int cy = row.center().y() + 1;
-        if (node->isFolder()) {
+        if (node->isFolder() && node->isExpandable()) {
             const bool expanded = item->isExpanded();
             QPen pen(mutedColor, 1.6, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
             p->setPen(pen);
@@ -319,7 +319,7 @@ void SidebarTree::mousePressEvent(QMouseEvent *event)
     if (event->button() == Qt::LeftButton) {
         if (QTreeWidgetItem *it = itemAt(event->position().toPoint())) {
             const SidebarNode *node = m_owner->node(it);
-            if (node && node->isFolder()) {
+            if (node && node->isFolder() && node->isExpandable()) {
                 const QRect r = visualItemRect(it);
                 const int x = event->position().toPoint().x();
                 if (x >= r.left() && x <= r.left() + rowInset + gutter + 2) {
@@ -736,7 +736,8 @@ void SidebarWidget::itemExpandedOrCollapsed(QTreeWidgetItem *item, bool expanded
 
 void SidebarWidget::toggleExpansion(QTreeWidgetItem *item)
 {
-    if (item)
+    const SidebarNode *n = node(item);
+    if (item && (!n || n->isExpandable()))
         item->setExpanded(!item->isExpanded());
 }
 
