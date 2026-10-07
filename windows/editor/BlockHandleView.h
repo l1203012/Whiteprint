@@ -17,6 +17,7 @@ public:
     explicit BlockHandleView(const BlueprintPalette &palette, QWidget *parent = nullptr);
 
     std::optional<BlockID> blockID() const { return m_blockID; }
+    void setBlueprintPalette(const BlueprintPalette &palette);
     std::function<void(BlockHandleView *)> onClick;
 
     /// Shows the handle for `block` at `origin`.

@@ -1,6 +1,6 @@
 #pragma once
-// The three panes of the settings window (ports of AISettingsViewController, NotesSettingsViewController
-// and StudySettingsViewController). Exposed so tests can drive them with their own settings objects.
+// The four panes of the settings window (ports of AISettingsViewController,
+// AppearanceSettingsViewController, NotesSettingsViewController and StudySettingsViewController). Exposed so tests can drive them with their own settings objects.
 #include <QWidget>
 #include <optional>
 
@@ -14,6 +14,7 @@ namespace wp {
 
 class AISettings;
 class NotesLibrary;
+class ViewPreferences;
 class StudySession;
 
 /// A vertical form with headers, notes and button rows.
@@ -75,6 +76,19 @@ private:
     QPushButton *m_testButton, *m_addButton;
     std::optional<QString> m_claude;
     QString m_helper;
+};
+
+/// The page theme. PDF export keeps its own Blueprint and Print styles.
+class AppearanceSettingsPage : public SettingsPane {
+    Q_OBJECT
+public:
+    explicit AppearanceSettingsPage(ViewPreferences &preferences, QWidget *parent = nullptr);
+    QComboBox *themePopup() const { return m_theme; }
+
+private:
+    void update();
+    ViewPreferences &m_preferences;
+    QComboBox *m_theme;
 };
 
 class NotesSettingsPage : public SettingsPane {

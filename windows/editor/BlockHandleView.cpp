@@ -14,6 +14,12 @@ BlockHandleView::BlockHandleView(const BlueprintPalette &palette, QWidget *paren
     setCursor(Qt::PointingHandCursor);
 }
 
+void BlockHandleView::setBlueprintPalette(const BlueprintPalette &palette)
+{
+    m_palette = palette;
+    update();
+}
+
 void BlockHandleView::showFor(BlockID block, QPoint origin)
 {
     move(origin);

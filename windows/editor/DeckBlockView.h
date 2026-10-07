@@ -60,7 +60,7 @@ struct DeckLayout {
     static double textHeight(const DeckText &text, double width);
 };
 
-/// A small pill button for the deck header, drawn for the blueprint page.
+/// A small pill button for the deck header, drawn in the page's colours.
 class DeckButton : public QAbstractButton
 {
     Q_OBJECT
@@ -68,6 +68,7 @@ class DeckButton : public QAbstractButton
 public:
     DeckButton(const QString &title, bool playSymbol, const BlueprintPalette &palette, QWidget *parent = nullptr);
     double preferredWidth(double height) const;
+    void setBlueprintPalette(const BlueprintPalette &palette);
 
 protected:
     void paintEvent(QPaintEvent *) override;
@@ -96,6 +97,8 @@ public:
 
     const CardDeck &deck() const { return m_deck; }
     void setDeck(const CardDeck &deck);
+    /// Changes the colours of the block and its buttons.
+    void setBlueprintPalette(const BlueprintPalette &palette);
     double fontSize() const { return m_fontSize; }
     void setFontSize(double size);
     /// Indices of the cards showing their answers.

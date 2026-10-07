@@ -9,6 +9,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <algorithm>
 #include <cmath>
 
 namespace wp {
@@ -86,6 +87,22 @@ double PageView::layoutBlocks(const PageGeometry &geometry)
     return sheet.height;
 }
 
+void PageView::setBlueprintPalette(const BlueprintPalette &palette)
+{
+    if (m_palette == palette)
+        return;
+    m_palette = palette;
+    update();
+}
+
+void PageView::setFollowsAnotherPage(bool follows)
+{
+    if (m_followsAnotherPage == follows)
+        return;
+    m_followsAnotherPage = follows;
+    update();
+}
+
 void PageView::paintEvent(QPaintEvent *event)
 {
     QPainter p(this);
@@ -93,33 +110,51 @@ void PageView::paintEvent(QPaintEvent *event)
     const QRectF sheet = sheetRect();
     const double radius = PageGeometry::cornerRadius;
 
+    if (!m_palette.drawsSheet) {
+        // No sheet: the text sits on the canvas, and a short centred rule marks each page after the first.
+        if (m_followsAnotherPage)
+            p.fillRect(QRectF(std::round(sheet.center().x() - 24), 0, 48, 1), m_palette.pageEdge);
+        drawPageBreaks(p, sheet);
+        return;
+    }
+
     // Soft shadow under the sheet.
     p.setPen(Qt::NoPen);
-    for (int i = 12; i >= 1; --i) {
-        p.setBrush(QColor(0, 0, 0, 6));
-        p.drawRoundedRect(sheet.adjusted(-i * 0.6, -i * 0.6 + 3, i * 0.6, i * 0.6 + 3), radius + i * 0.6, radius + i * 0.6);
+    if (m_palette.shadowOpacity > 0) {
+        // Twelve rings at 6/255 each made the original 0.22 shadow; scale them to the palette's opacity.
+        const QColor ring = QColor::fromRgbF(0, 0, 0, std::min(1.0, 6.0 / 255 * m_palette.shadowOpacity / 0.22));
+        for (int i = 12; i >= 1; --i) {
+            p.setBrush(ring);
+            p.drawRoundedRect(sheet.adjusted(-i * 0.6, -i * 0.6 + 3, i * 0.6, i * 0.6 + 3), radius + i * 0.6, radius + i * 0.6);
+        }
     }
     p.setBrush(m_palette.pageBackground);
     p.drawRoundedRect(sheet, radius, radius);
 
+    if (m_palette.showsGrid)
+        drawGrid(p, QRectF(event->rect()).intersected(sheet), sheet);
+
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setPen(m_palette.pageEdge);
+    p.setBrush(Qt::NoBrush);
+    p.drawRoundedRect(sheet.adjusted(0.5, 0.5, -0.5, -0.5), radius, radius);
+    drawPageBreaks(p, sheet);
+}
+
+void PageView::drawGrid(QPainter &p, const QRectF &area, const QRectF &sheet)
+{
+    const double radius = PageGeometry::cornerRadius;
     p.save();
     QPainterPath clip;
     clip.addRoundedRect(sheet, radius, radius);
     p.setClipPath(clip);
     p.setRenderHint(QPainter::Antialiasing, false);
-    const QRectF area = QRectF(event->rect()).intersected(sheet);
     p.setPen(QPen(m_palette.grid, 1));
     for (double x = sheet.left() + (std::floor((area.left() - sheet.left()) / gridSpacing) + 1) * gridSpacing; x < area.right(); x += gridSpacing)
         p.drawLine(QPointF(x + 0.5, area.top()), QPointF(x + 0.5, area.bottom()));
     for (double y = sheet.top() + (std::floor((area.top() - sheet.top()) / gridSpacing) + 1) * gridSpacing; y < area.bottom(); y += gridSpacing)
         p.drawLine(QPointF(area.left(), y + 0.5), QPointF(area.right(), y + 0.5));
     p.restore();
-
-    p.setRenderHint(QPainter::Antialiasing);
-    p.setPen(QColor(255, 255, 255, 20));
-    p.setBrush(Qt::NoBrush);
-    p.drawRoundedRect(sheet.adjusted(0.5, 0.5, -0.5, -0.5), radius, radius);
-    drawPageBreaks(p, sheet);
 }
 
 void PageView::drawPageBreaks(QPainter &p, const QRectF &sheet)

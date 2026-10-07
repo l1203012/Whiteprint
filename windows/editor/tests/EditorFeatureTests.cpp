@@ -87,6 +87,25 @@ private slots:
         QVERIFY(std::abs(editor().topBlock()->second - top->second) < 0.05);
     }
 
+    // MARK: Page themes
+
+    void changingThePaletteRestylesInPlace()
+    {
+        h.open("Intro text\n+++page\nSecond page");
+        BlockTextView *view = editor().textViews().value(h.block(0, 0).id);
+        QVERIFY(!editor().blueprintPalette().showsGrid); // pages default to the Paper theme
+        QCOMPARE(editor().pageViews().size(), 2);
+        QVERIFY(!editor().pageViews()[0]->followsAnotherPage());
+        QVERIFY(editor().pageViews()[1]->followsAnotherPage());
+        editor().setBlueprintPalette(BlueprintPalette::blueprint());
+        QCOMPARE(S::formatAt(*view->document(), 0).foreground().color(), QColor(Qt::white));
+        QVERIFY(view->blueprintPalette() == BlueprintPalette::blueprint());
+        QVERIFY(editor().pageViews()[0]->blueprintPalette() == BlueprintPalette::blueprint());
+        editor().setBlueprintPalette(BlueprintPalette::sepia());
+        QCOMPARE(S::formatAt(*view->document(), 0).foreground().color(), BlueprintPalette::sepia().text);
+        QCOMPARE(editor().scrollArea()->viewport()->palette().color(QPalette::Window), BlueprintPalette::sepia().canvas);
+    }
+
     // MARK: Concealed Markdown
 
     void hidingSyntaxConcealsAllButTheCaretParagraph()

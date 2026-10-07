@@ -7,6 +7,7 @@
 #include "app/NotesLibrary.h"
 #include "app/StudySession.h"
 #include "app/UiKit.h"
+#include "app/ViewPreferences.h"
 #include "bridge/Bridge.h"
 #include "render/Fonts.h"
 #include "study/ClaudeCodeRunner.h"
@@ -370,6 +371,28 @@ void AISettingsPage::connectDesktop()
 }
 
 // MARK: Notes
+
+AppearanceSettingsPage::AppearanceSettingsPage(ViewPreferences &preferences, QWidget *parent)
+    : SettingsPane(parent), m_preferences(preferences)
+{
+    header(QStringLiteral("Page theme"));
+    note(QStringLiteral("How pages look while you write. PDF export has its own Blueprint and Print styles."));
+    m_theme = new QComboBox;
+    for (const PageTheme theme : PageThemes::all())
+        m_theme->addItem(PageThemes::title(theme));
+    connect(m_theme, &QComboBox::activated, this, [this](int index) {
+        const QList<PageTheme> themes = PageThemes::all();
+        m_preferences.setPageTheme(themes[qBound(0, index, int(themes.size()) - 1)]);
+    });
+    row({m_theme});
+    update();
+    connect(&m_preferences, &ViewPreferences::changed, this, [this] { update(); });
+}
+
+void AppearanceSettingsPage::update()
+{
+    m_theme->setCurrentIndex(qMax(0, int(PageThemes::all().indexOf(m_preferences.pageTheme()))));
+}
 
 NotesSettingsPage::NotesSettingsPage(NotesLibrary &library, QWidget *parent) : SettingsPane(parent), m_library(library)
 {

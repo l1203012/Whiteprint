@@ -26,7 +26,7 @@ class QScrollArea;
 namespace wp {
 
 /// The Notion-style editing surface for one note: a scrolling, centred column
-/// of blue blueprint pages with white text, inline drawings and flashcard
+/// of pages in the chosen `PageTheme`, with inline drawings and flashcard
 /// decks, slash menu, Markdown shortcuts and checkboxes.
 ///
 /// The content lives in an `EditorDocument`; views are thin and keyed by
@@ -35,6 +35,8 @@ namespace wp {
 /// # Public API (mirrors the Swift `NoteEditorView`)
 ///
 /// - `NoteEditorView(note, palette)`; `note()`: the current content, including unsaved edits.
+/// - `blueprintPalette()` / `setBlueprintPalette(palette)`: the page colours (Paper by default);
+///   changing them restyles every page in place.
 /// - `onChange(Note)` / signal `changed(Note)`: after each user edit (coalesced, at most every ~300 ms).
 /// - `onVisiblePageChange(int)` / signal `visiblePageChanged(int)`: the page nearest the top of
 ///   the viewport changed (1-based).
@@ -61,7 +63,8 @@ class NoteEditorView : public QWidget,
     Q_OBJECT
 
 public:
-    explicit NoteEditorView(const Note &note, const BlueprintPalette &palette = BlueprintPalette::blueprint(), QWidget *parent = nullptr);
+    explicit NoteEditorView(const Note &note, const BlueprintPalette &palette = PageThemes::palette(PageThemes::defaultTheme),
+                            QWidget *parent = nullptr);
     ~NoteEditorView() override;
 
     /// The current content, including unsaved edits.
@@ -84,6 +87,9 @@ public:
     /// except in the paragraphs holding the caret or selection, so they stay
     /// editable; the text is still raw Markdown.
     void setShowsMarkdownSyntax(bool shows);
+
+    /// The page colours; changing them restyles every page in place.
+    void setBlueprintPalette(const BlueprintPalette &palette);
 
     /// Replaces the content, e.g. after Claude edited the note over MCP. With
     /// `preservingSelection`, the caret and scroll position stay where they were
@@ -268,6 +274,7 @@ private:
     void focusEnd(PageView *page);
     void closeEditorsOfRemovedBlocks();
     void scheduleLayout();
+    void applyCanvas();
     void updateHandle(const QPointF &point);
     std::optional<std::pair<PageView *, QWidget *>> blockViewAt(const QPointF &point) const;
     bool handleSlashMenuKey(QKeyEvent *event);

@@ -149,6 +149,16 @@ void drawSymbol(QPainter &p, Symbol symbol, const QRectF &rect, const QColor &co
         p.drawLine(pt(0.74, 0.74), pt(0.5, 0.82));
         break;
     }
+    case Symbol::palette: {
+        // A painter's palette: a round board with a thumb hole and three paint dabs.
+        p.drawEllipse(box(0.12, 0.14, 0.76, 0.72));
+        p.drawEllipse(box(0.56, 0.56, 0.14, 0.14));
+        p.setPen(Qt::NoPen);
+        p.setBrush(color);
+        for (const QPointF &dab : {pt(0.34, 0.36), pt(0.54, 0.3), pt(0.3, 0.58)})
+            p.drawEllipse(dab, r.width() * 0.06, r.width() * 0.06);
+        break;
+    }
     }
     p.restore();
 }

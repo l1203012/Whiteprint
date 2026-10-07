@@ -10,9 +10,9 @@
 
 namespace wp {
 
-/// One blueprint sheet: blue background, faint grid, rounded corners and a
-/// soft shadow, with its blocks stacked inside the padding. In A4 layout,
-/// dashed guides mark where printed pages break.
+/// One sheet in the page theme's colours (blueprint pages add a faint grid),
+/// with rounded corners and a soft shadow, its blocks stacked inside the
+/// padding. In A4 layout, dashed guides mark where printed pages break.
 ///
 /// Pages far from the viewport aren't realized: they have no block views,
 /// just an estimated height, until they scroll near.
@@ -22,7 +22,13 @@ public:
     PageView(PageID pageID, const BlueprintPalette &palette, QWidget *parent = nullptr);
 
     PageID pageID() const { return m_pageID; }
+    const BlueprintPalette &blueprintPalette() const { return m_palette; }
+    /// Changes the colours and repaints.
+    void setBlueprintPalette(const BlueprintPalette &palette);
     bool isRealized = false;
+    /// Not the note's first page: without a sheet, a short rule above marks the break.
+    bool followsAnotherPage() const { return m_followsAnotherPage; }
+    void setFollowsAnotherPage(bool follows);
     /// Content height used while not realized, and the text width it was estimated for.
     double estimatedContentHeight = 0;
     double estimatedWidth = 0;
@@ -45,10 +51,12 @@ protected:
     void mousePressEvent(QMouseEvent *) override;
 
 private:
+    void drawGrid(QPainter &painter, const QRectF &area, const QRectF &sheet);
     void drawPageBreaks(QPainter &painter, const QRectF &sheet);
 
     PageID m_pageID;
     BlueprintPalette m_palette;
+    bool m_followsAnotherPage = false;
     QList<QWidget *> m_blockViews;
     std::vector<double> m_pageBreaks;
 };

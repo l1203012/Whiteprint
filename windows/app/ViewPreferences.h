@@ -1,5 +1,7 @@
 #pragma once
 // Port of ViewPreferences.swift.
+#include "render/Palette.h"
+
 #include <QObject>
 #include <QSettings>
 #include <QString>
@@ -10,13 +12,14 @@ namespace wp {
 /// editor module's PageLayoutMode.
 enum class ViewLayout { slides, a4 };
 
-/// App-wide editor display options from the View menu: page layout and whether Markdown syntax is
-/// shown. Every open editor connects to `changed()` and applies the new values.
+/// App-wide editor display options from the View menu: page layout, page theme and whether Markdown
+/// syntax is shown. Every open editor connects to `changed()` and applies the new values.
 class ViewPreferences : public QObject {
     Q_OBJECT
 public:
     static inline const QString layoutKey = QStringLiteral("PageLayout");
     static inline const QString syntaxKey = QStringLiteral("ShowMarkdownSyntax");
+    static inline const QString themeKey = QStringLiteral("PageTheme");
 
     /// The app-wide instance on AppDefaults::store().
     static ViewPreferences &shared();
@@ -30,6 +33,12 @@ public:
 
     bool showsMarkdownSyntax() const;
     void setShowsMarkdownSyntax(bool shows);
+
+    /// Paper unless another theme is stored; an unknown stored value falls back to Paper.
+    PageTheme pageTheme() const;
+    void setPageTheme(PageTheme theme);
+    /// The page theme's colours for the current Windows light/dark mode.
+    BlueprintPalette pagePalette() const;
 
 signals:
     /// A view preference changed (`viewPreferencesDidChange`).

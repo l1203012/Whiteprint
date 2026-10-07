@@ -4,6 +4,7 @@
 
 #include <QApplication>
 #include <QMouseEvent>
+#include <QPalette>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QUndoCommand>
@@ -144,6 +145,7 @@ void NoteEditorView::setUpViews()
     m_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     m_scroll->viewport()->setAutoFillBackground(true);
+    applyCanvas();
     m_documentView = new EditorDocumentView;
     m_scroll->setWidget(m_documentView);
     m_documentView->setAutoFillBackground(false);
@@ -198,6 +200,40 @@ void NoteEditorView::setLayoutMode(PageLayoutMode mode)
         m_needsLayout = true;
         layoutSubtreeIfNeeded();
     });
+}
+
+void NoteEditorView::setBlueprintPalette(const BlueprintPalette &palette)
+{
+    if (palette == m_palette)
+        return;
+    m_palette = palette;
+    applyCanvas();
+    m_handle->setBlueprintPalette(palette);
+    for (PageView *page : std::as_const(m_pageViews))
+        page->setBlueprintPalette(palette);
+    for (BlockTextView *view : std::as_const(m_textViews))
+        view->setBlueprintPalette(palette);
+    for (DrawingBlockView *view : std::as_const(m_drawingViews))
+        view->setBlueprintPalette(palette);
+    for (DeckBlockView *view : std::as_const(m_deckViews))
+        view->setBlueprintPalette(palette);
+    for (PageView *page : std::as_const(m_pageViews))
+        page->estimatedWidth = 0;
+    scheduleLayout();
+}
+
+/// The scroll background: the palette's canvas, or the window background when it has none.
+void NoteEditorView::applyCanvas()
+{
+    QWidget *viewport = m_scroll->viewport();
+    if (!m_palette.canvas.isValid()) {
+        viewport->setPalette(QPalette());
+        return;
+    }
+    QPalette p = viewport->palette();
+    p.setColor(QPalette::Window, m_palette.canvas);
+    p.setColor(QPalette::Base, m_palette.canvas);
+    viewport->setPalette(p);
 }
 
 void NoteEditorView::setShowsMarkdownSyntax(bool shows)
@@ -366,6 +402,7 @@ void NoteEditorView::layoutDocument()
         const QRect frame(int(geo.pageX - inset), int(sheetTop - inset), int(geo.pageWidth + 2 * inset), int(height + 2 * inset));
         if (page->geometry() != frame)
             page->setGeometry(frame);
+        page->setFollowsAnotherPage(index > 0);
         sheetTop += height + PageGeometry::pageGap;
     }
     const int height = int(std::max(sheetTop + PageGeometry::pageGap, double(m_scroll->viewport()->height())));

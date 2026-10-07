@@ -13,6 +13,7 @@
 #include <QMenuBar>
 #include <QPointer>
 #include <memory>
+#include <utility>
 
 namespace wp::MainMenu {
 
@@ -117,17 +118,29 @@ void viewMenu(QMenuBar *bar, NoteWindow *w)
         a->setCheckable(true);
         group->addAction(a);
     }
+    QMenu *themeMenu = menu->addMenu(QStringLiteral("Page Theme"));
+    auto *themeGroup = new QActionGroup(themeMenu);
+    QList<std::pair<PageTheme, QAction *>> themes;
+    for (PageTheme theme : PageThemes::all()) {
+        QAction *a = add(themeMenu, PageThemes::title(theme), {}, w, [theme] { ViewPreferences::shared().setPageTheme(theme); });
+        a->setCheckable(true);
+        themeGroup->addAction(a);
+        themes.append({theme, a});
+    }
     QAction *syntax = add(menu, QStringLiteral("Show Markdown Syntax"), keys("Ctrl+Shift+M"), w,
                           [] { ViewPreferences::shared().setShowsMarkdownSyntax(!ViewPreferences::shared().showsMarkdownSyntax()); });
     syntax->setCheckable(true);
-    auto refresh = [slides, a4, syntax] {
+    auto refresh = [slides, a4, syntax, themes] {
         const auto &prefs = ViewPreferences::shared();
         slides->setChecked(prefs.layoutMode() == ViewLayout::slides);
         a4->setChecked(prefs.layoutMode() == ViewLayout::a4);
+        for (const auto &[theme, action] : themes)
+            action->setChecked(prefs.pageTheme() == theme);
         syntax->setChecked(prefs.showsMarkdownSyntax());
     };
     QObject::connect(menu, &QMenu::aboutToShow, menu, refresh);
     QObject::connect(layout, &QMenu::aboutToShow, layout, refresh);
+    QObject::connect(themeMenu, &QMenu::aboutToShow, themeMenu, refresh);
     refresh();
     menu->addSeparator();
     add(menu, QStringLiteral("Enter Full Screen"), keys("F11"), w, [w] { w->isFullScreen() ? w->showNormal() : w->showFullScreen(); });

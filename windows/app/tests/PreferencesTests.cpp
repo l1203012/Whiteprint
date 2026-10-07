@@ -1,5 +1,6 @@
 // Port of PreferencesTests.swift (the Touch Bar test has no Windows counterpart).
 #include "app/AISettings.h"
+#include "app/MacStyle.h"
 #include "app/ViewPreferences.h"
 
 #include <QTemporaryDir>
@@ -36,6 +37,33 @@ private slots:
         m_defaults->sync();
         QCOMPARE(ViewPreferences(*m_defaults).layoutMode(), ViewLayout::a4);
         QVERIFY(ViewPreferences(*m_defaults).showsMarkdownSyntax());
+    }
+
+    void pageThemeDefaultsToPaper()
+    {
+        ViewPreferences preferences(*m_defaults);
+        QCOMPARE(preferences.pageTheme(), PageTheme::paper);
+        QSignalSpy spy(&preferences, &ViewPreferences::changed);
+        preferences.setPageTheme(PageTheme::blueprint);
+        preferences.setPageTheme(PageTheme::blueprint);
+        QCOMPARE(spy.count(), 1);
+        m_defaults->sync();
+        QCOMPARE(ViewPreferences(*m_defaults).pageTheme(), PageTheme::blueprint);
+        QCOMPARE(m_defaults->value(ViewPreferences::themeKey).toString(), QStringLiteral("blueprint"));
+        m_defaults->setValue(ViewPreferences::themeKey, QStringLiteral("plaid"));
+        QCOMPARE(ViewPreferences(*m_defaults).pageTheme(), PageTheme::paper); // an unknown theme falls back to the default
+    }
+
+    void paperFollowsLightAndDark()
+    {
+        ViewPreferences preferences(*m_defaults);
+        mac::setDarkOverride(0);
+        QVERIFY(preferences.pagePalette() == BlueprintPalette::paper(false));
+        mac::setDarkOverride(1);
+        QVERIFY(preferences.pagePalette() == BlueprintPalette::paper(true));
+        preferences.setPageTheme(PageTheme::sepia);
+        QVERIFY(preferences.pagePalette() == BlueprintPalette::sepia());
+        mac::setDarkOverride(-1);
     }
 
     void providerAndModel()

@@ -12,7 +12,7 @@ class QPainter;
 namespace wp::ui {
 
 enum class Symbol {
-    note, page, command, deck, search, folder, sparkles, tray, document, xmark, lock, hourglass, gear, graduation, plus
+    note, page, command, deck, search, folder, sparkles, tray, document, xmark, lock, hourglass, gear, graduation, plus, palette
 };
 
 /// Draws `symbol` with a 1.4 px stroke in `color`, fitted into `rect`.

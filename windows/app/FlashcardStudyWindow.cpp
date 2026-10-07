@@ -7,6 +7,7 @@
 #include "app/NoteTitle.h"
 #include "app/NoteWorkspace.h"
 #include "app/UiKit.h"
+#include "app/ViewPreferences.h"
 #include "render/Fonts.h"
 
 #include <QCheckBox>
@@ -68,15 +69,17 @@ void FlashcardView::paintEvent(QPaintEvent *)
     QPainterPath shape;
     shape.addRoundedRect(sheet, 10, 10);
     p.fillPath(shape, m_palette.pageBackground);
-    p.save();
-    p.setClipPath(shape);
-    p.setPen(QPen(m_palette.grid, 1));
-    p.setRenderHint(QPainter::Antialiasing, false);
-    for (double x = sheet.left() + 20; x < sheet.right(); x += 20)
-        p.drawLine(QPointF(x, sheet.top()), QPointF(x, sheet.bottom()));
-    for (double y = sheet.top() + 20; y < sheet.bottom(); y += 20)
-        p.drawLine(QPointF(sheet.left(), y), QPointF(sheet.right(), y));
-    p.restore();
+    if (m_palette.showsGrid) {
+        p.save();
+        p.setClipPath(shape);
+        p.setPen(QPen(m_palette.grid, 1));
+        p.setRenderHint(QPainter::Antialiasing, false);
+        for (double x = sheet.left() + 20; x < sheet.right(); x += 20)
+            p.drawLine(QPointF(x, sheet.top()), QPointF(x, sheet.bottom()));
+        for (double y = sheet.top() + 20; y < sheet.bottom(); y += 20)
+            p.drawLine(QPointF(sheet.left(), y), QPointF(sheet.right(), y));
+        p.restore();
+    }
     p.setRenderHint(QPainter::Antialiasing);
 
     const QRectF text = sheet.adjusted(40, 32, -40, -32);
@@ -207,7 +210,7 @@ FlashcardStudyWindow::FlashcardStudyWindow(const QString &notePath, const QStrin
     header->addStretch(1);
     header->addWidget(m_shuffleBox);
 
-    m_card = new FlashcardView(BlueprintPalette::blueprint());
+    m_card = new FlashcardView(ViewPreferences::shared().pagePalette());
     connect(m_card, &FlashcardView::clicked, this, [this] { flip(); });
 
     m_hint = ui::label({}, 11, QFont::Normal, true);

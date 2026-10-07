@@ -54,14 +54,8 @@ BlockTextView::BlockTextView(BlockID blockID, const QString &text, const Bluepri
     setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
     viewport()->setAutoFillBackground(false);
     setAutoFillBackground(false);
-    QPalette p = this->palette();
-    p.setColor(QPalette::Base, Qt::transparent);
-    p.setColor(QPalette::Text, palette.text);
-    p.setColor(QPalette::Highlight, withAlpha(palette.accent, 0.32));
-    p.setColor(QPalette::HighlightedText, palette.text);
-    setPalette(p);
+    applyPaletteColors();
     setAccessibleName(QStringLiteral("Text block"));
-    setCurrentCharFormat(TextStyle::base(palette, fontSize));
 
     connect(document(), &QTextDocument::contentsChange, this, &BlockTextView::onContentsChange);
     connect(this, &QTextEdit::cursorPositionChanged, this, &BlockTextView::onSelectionChanged);
@@ -71,6 +65,26 @@ BlockTextView::BlockTextView(BlockID blockID, const QString &text, const Bluepri
     setLineWrapColumnOrWidth(int(width));
     setFixedHeight(int(TextStyle::lineHeight(fontSize)));
     setText(text);
+}
+
+void BlockTextView::setBlueprintPalette(const BlueprintPalette &palette)
+{
+    if (m_palette == palette)
+        return;
+    m_palette = palette;
+    applyPaletteColors();
+    restyle();
+}
+
+void BlockTextView::applyPaletteColors()
+{
+    QPalette p = this->palette();
+    p.setColor(QPalette::Base, Qt::transparent);
+    p.setColor(QPalette::Text, m_palette.text);
+    p.setColor(QPalette::Highlight, withAlpha(m_palette.accent, 0.32));
+    p.setColor(QPalette::HighlightedText, m_palette.text);
+    setPalette(p);
+    setCurrentCharFormat(TextStyle::base(m_palette, m_fontSize));
 }
 
 void BlockTextView::setAlonePlaceholder(bool alone)
