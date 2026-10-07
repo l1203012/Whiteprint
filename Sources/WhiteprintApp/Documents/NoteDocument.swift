@@ -44,13 +44,30 @@ final class NoteDocument: NSDocument {
         NoteTitle.display(for: note, fileURL: fileURL)
     }
 
+    /// The title, after the note's icon when icons are shown: the window
+    /// and tab title.
     override var displayName: String! {
-        get { title }
+        get {
+            guard ViewPreferences.shared.showsCoversAndIcons, let icon = note.frontMatter.icon else { return title }
+            return icon + " " + title
+        }
         set { super.displayName = newValue }
     }
 
+    private var preferencesObserver: NSObjectProtocol?
+
     override func makeWindowControllers() {
         addWindowController(NoteWindowController(document: self))
+        // Showing or hiding icons changes the window title.
+        preferencesObserver = NotificationCenter.default.addObserver(
+            forName: .viewPreferencesDidChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.windowControllers.forEach { $0.synchronizeWindowTitleWithDocumentName() }
+        }
+    }
+
+    deinit {
+        preferencesObserver.map(NotificationCenter.default.removeObserver)
     }
 
     override func data(ofType typeName: String) throws -> Data {
@@ -103,9 +120,9 @@ final class NoteDocument: NSDocument {
     }
 
     private func setNote(_ new: Note, origin: ChangeOrigin) {
-        let titleChanged = NoteTitle.display(for: new, fileURL: fileURL) != title
+        let oldName = displayName
         note = new
-        if titleChanged {
+        if displayName != oldName {
             windowControllers.forEach { $0.synchronizeWindowTitleWithDocumentName() }
         }
         NotificationCenter.default.post(name: .noteDocumentDidChange, object: self, userInfo: ["origin": origin])
