@@ -135,8 +135,8 @@ plain layout, since Finder finds the volume by name.
 Notarization needs `notarytool` and `stapler` (Xcode, or recent Command Line Tools); without them
 the script says so and skips it.
 
-The window background lives in `Resources/DMG/` and is drawn by `Scripts/make-dmg-background.swift`
-(see the comment at its top for how to run it).
+The window background lives in `Resources/DMG/` (`background.png` and `background@2x.png`, 640 × 400
+points).
 
 ## Signing and notarization secrets
 

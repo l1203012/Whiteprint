@@ -634,27 +634,12 @@ Scripts/test.sh WhiteprintApp   # one module
 Scripts/check-targets.sh        # Package.swift and Scripts/targets.sh agree
 Scripts/release.sh 0.1.0        # universal .build/release/Whiteprint-0.1.0.dmg + .sha256
 ARCHS=arm64 Scripts/release.sh 0.1.0    # Whiteprint-0.1.0-AppleSilicon.dmg (x86_64: -Intel.dmg)
-Scripts/make-screenshots.sh     # regenerate the images in docs/images
 ```
 
 `Scripts/test.sh` uses `swift test` when Xcode's XCTest is available and the stand-in otherwise; force
 one with `WHITEPRINT_TEST_RUNNER=swiftpm` or `WHITEPRINT_TEST_RUNNER=shim`. With Xcode installed,
 `swift build` and `swift test` work too. `CONFIG=release` and `ARCHS="arm64 x86_64"` make an optimised
 universal build.
-
-<details>
-<summary><b>How the macOS screenshots are made</b></summary>
-
-`Scripts/make-screenshots.sh` builds the app, writes demo notes and course files to `/tmp/wp-shots`, and
-runs a copy of the app (with its own bundle id, socket, defaults suite and home folder, so it never
-touches your notes, preferences, Keychain or Claude config) with `WHITEPRINT_SCREENSHOTS` set. The tour
-in [`ScreenshotMode.swift`](Sources/WhiteprintApp/Debug/ScreenshotMode.swift) opens notes in tabs,
-switches layouts, opens the palette, the study panel, the flashcard window and Settings, and captures its
-own windows with `CGWindowListCreateImage`, which needs no Screen Recording permission. It also renders
-the PDF export, the drawing-language example and the DMG window. The PNGs are then resized to at most
-1600 px and reduced to palette images. Its windows come to the front for about half a minute.
-
-</details>
 
 ### Windows
 
@@ -665,7 +650,6 @@ CMake and Ninja. Inno Setup 6 (`winget install JRSoftware.InnoSetup`) only for t
 windows\build.ps1                              # configure, build, run every module's tests (.build\windows)
 windows\build.ps1 -NoTest                      # build only
 windows\installer\package.ps1 -Version 0.1.1   # .build\windows-release\Whiteprint-0.1.1-Setup.exe + .sha256
-windows\make-screenshots.ps1                   # regenerate the images in docs\images\windows
 ```
 
 Run them with `powershell -ExecutionPolicy Bypass -File <script>` if scripts are blocked. Tests are Qt

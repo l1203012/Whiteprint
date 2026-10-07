@@ -31,7 +31,7 @@ case "$ARCHS" in
     x86_64) KIND=Intel; DMG=$OUT/Whiteprint-$VERSION-Intel.dmg ;;
     *) KIND=universal; DMG=$OUT/Whiteprint-$VERSION.dmg ;;
 esac
-# Window content size and icon centres; keep in sync with Scripts/make-dmg-background.swift.
+# Window content size and icon centres; keep in sync with Resources/DMG/background.png.
 WINDOW_WIDTH=640
 WINDOW_HEIGHT=400
 APP_SPOT="160, 205"

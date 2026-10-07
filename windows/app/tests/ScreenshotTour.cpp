@@ -1,8 +1,7 @@
 // README screenshot tour (Windows twin of the macOS ScreenshotMode.swift).
-// Skipped unless WHITEPRINT_SCREENSHOTS names an output folder; windows/make-screenshots.ps1 runs it and
-// then shrinks the PNGs into docs/images/windows. It opens the real app windows on demo notes in a temporary
-// notes folder, with their own defaults suite and bridge pipe, and saves PNGs of them (client area plus a
-// drawn Windows caption and shadow, since the offscreen platform has no native frame).
+// Skipped unless WHITEPRINT_SCREENSHOTS names an output folder. It opens the real app windows on demo
+// notes in a temporary notes folder, with their own defaults suite and bridge pipe, and saves PNGs of them
+// (client area plus a drawn Windows caption and shadow, since the offscreen platform has no native frame).
 //
 //   WHITEPRINT_SCREENSHOTS=<dir>            where the PNGs go
 #include "app/AppController.h"

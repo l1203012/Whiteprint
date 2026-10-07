@@ -5,7 +5,7 @@ import WhiteprintEditor
 import WhiteprintRender
 import WhiteprintStudy
 
-/// Developer screenshot tour for the README, run by `Scripts/make-screenshots.sh`.
+/// Developer screenshot tour for the README.
 ///
 /// With `WHITEPRINT_SCREENSHOTS=<dir>` set, the app walks through a fixed set
 /// of scenes on the notes in `WHITEPRINT_NOTES_DIR`, saves PNGs of its own
