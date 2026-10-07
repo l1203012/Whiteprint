@@ -28,7 +28,11 @@ final class PDFExtractionTests: XCTestCase {
 
         let document = try DocumentExtractor.extract(url, ocr: false)
         XCTAssertEqual(document.name, "Syllabus.pdf")
-        XCTAssertEqual(document.units, [
+        // Whether two lines of one paragraph come out of PDFKit joined by a space
+        // or a line break varies by macOS version (15 keeps breaks that 13 and 14
+        // join). Extraction keeps line breaks as given, so compare them as spaces.
+        let units = document.units.map { ExtractedUnit(ref: $0.ref, text: $0.text.replacingOccurrences(of: "\n", with: " ")) }
+        XCTAssertEqual(units, [
             ExtractedUnit(ref: "p. 1", text: "Cells are the basic unit of life. Each cell stores information in DNA."),
             ExtractedUnit(ref: "p. 2", text: "Mitochondria produce energy for the cell."),
             ExtractedUnit(ref: "p. 4", text: "Ribosomes build proteins from amino acids."),
